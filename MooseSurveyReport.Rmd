@@ -30,7 +30,6 @@ library(sqldf)
 Connection = dbConnect(odbc(),Driver = "Sql Server",Server = "inpyugamsvm01\\nuna", Database = "Moose")
 
 # DOCUMENTATION
-# ---------------------------------------------------------
 # This R Markdown file generates a skeleton summary report for an NPS Alaska Region Moose Survey. 
 # The user can flesh out the report as needed.
 # Author: NPS\SDMiller 
@@ -39,16 +38,11 @@ Connection = dbConnect(odbc(),Driver = "Sql Server",Server = "inpyugamsvm01\\nun
 # have at minimum datareader permissions on the database.
 # Set up the report parameters below before running.
 
-# ---------------------------------------------------------
-# USER: SET UP THE REPORT PARAMETERS HERE
-# ---------------------------------------------------------
-# Start by entiring a valid SurveyName from the Moose database (\\inpyugamsvm01\nuna:Moose) on which to build the report
+# Start by entering a valid SurveyName above from the Moose database (\\inpyugamsvm01\nuna:Moose) on which to build the report
 
 # You can get a list of SurveyNames by uncommenting the three lines below:
 # SurveyNamesQuery = "SELECT DISTINCT SurveyName FROM GSPE_Surveys ORDER BY SurveyName" # Query to get a list of survey names
 # SurveyNamesDataFrame = dbGetQuery(Connection,"SELECT DISTINCT SurveyName FROM GSPE_Surveys ORDER BY SurveyName") # Builds a data frame from the query above
-
-
 
 # Make kable show blanks for NAs
 options(knitr.kable.NA = '')
@@ -67,7 +61,7 @@ FigureCounter = 1
 
 ```
 
-```{r , echo=FALSE}
+```{r, label="Get surveys" , echo=FALSE}
 
 # This query gets the survey details from the GSPE_Surveys database table
 Sql = paste("SELECT 
@@ -105,7 +99,7 @@ Comments = GSPE_SurveysDF$Comments
 ```
 
 
-```{r, echo=FALSE}
+```{r,label="Get GSPE data", echo=FALSE}
 # Extract a summary of data from the database
 Sql = paste("SELECT 
  Park
@@ -193,7 +187,7 @@ Anchorage, AK 99501
 
 
 
-```{r, echo=FALSE}
+```{r,label="GetAbstract", echo=FALSE}
 
 # This query gets the survey details from the GSPE_Surveys database table
 Sql = paste("SELECT Abstract FROM GSPE_Surveys WHERE SurveyName = '", SurveyName , "'",sep="")
@@ -212,7 +206,7 @@ Details about the `r SurveyName` are presented in Table 1, below.
 
 Table 1. Survey details,  `r SurveyName`.
 
-```{r echo=FALSE}
+```{r,label="Get Dashboard data",echo=FALSE}
 #kable(DetailsDF_t, caption = "Survey details")
 kable(t(GSPE_SurveysDF),caption = "Survey summary")
 
@@ -250,7 +244,7 @@ kable(DashboardDF_t)
 The survey area for the `r SurveyName` is shown in the map below (Figure 1).
 <!--  Table 2 provides information about the survey units including boundaries, center points and area. -->
 
-```{r echo = FALSE}
+```{r,label="Get spatial data and generate a map", echo = FALSE}
 
 # Query the survey units. The polygons are in the Feature attribute
 Sql = paste("SELECT ID,Counted
@@ -337,7 +331,7 @@ if (nrow(DF) == 0){
 
 Figure 1. Map of survey units, `r SurveyName`. Park boundary is shown in gray. 
 
-```{r echo=FALSE}
+```{r,label="Get survey units area data", echo=FALSE}
 
 # Get a data frame of units and their area to present to the report
 UnitsDF = DF[,c("ID","Lat","Lon","Area_SqKm","Area_SqMi")] 
@@ -349,19 +343,13 @@ n = colSums(!is.na(UnitsDF))[4] # Count of the number of units with area
 
 ```
 
-<!-- Table 1. Survey units for the `r SurveyName`. Total area surveyed was `r TotalAreaKm` square km (`r TotalAreaMi` square miles, n = `r n`). -->
-
-```{r echo=FALSE}
-# kable(UnitsDF)
-```
-
 # Results
 
 Survey results are presented in Table3, below. Please note these results are calculated automatically by the database and may not account for the unique factors that affect a moose survey (logistical or weather problems, whether a sightability correction factor was generated and applied, missing or incomplete data collection, missing units, partially surveyed units, differing methods among flight crews, etc.). Consult the [survey report](`r DashboardDF$ReportLink`) to interpret results.
 
 Table 3. Survey results.
 
-```{r echo=FALSE}
+```{r,label="Get survey summary data", echo=FALSE}
 Sql = paste("SELECT Park
 , Year
 --, StartDate
@@ -429,7 +417,7 @@ kable(Summary_ResultsDF_t)
 
 [To be written]
 
-```{r, echo=FALSE}
+```{r,label="Get summary and data processing data", echo=FALSE}
 
 # This query gets the survey details from the GSPE_Surveys database table
 Sql = paste("SELECT 
@@ -461,17 +449,25 @@ Appendix B contains a list of quality control procedures and processing steps th
 `r DatasetProcessingSteps`
 
 
-```{r echo=FALSE}
+```{r,label="Write the report to the survey directory", echo=FALSE}
 
+# This template will output to an html file named MooseSurveyReport.htms
+# Rename it and copy it to the survey directory if it exists
+# Otherwise rename it in the current directory
 From = "MooseSurveyReport.html"
+
+# Set up the source file title
 ReportTitle = paste(SurveyName," Summary.html",sep="")
+
 # Check if the survey directory exists
+# Set up a destination file path for the file copy operation
 if (dir.exists(DashboardDF$DataResourcesDirectory)) {
   To=paste(DashboardDF$DataResourcesDirectory,"/",ReportTitle,sep="")
 } else {
   To=ReportTitle
 }
 
+# Try to copy the file to the destination
 tryCatch({
   file.copy(From, To, overwrite = TRUE)
 }, error = function(e) {

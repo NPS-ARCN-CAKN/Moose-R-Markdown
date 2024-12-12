@@ -1,0 +1,65 @@
+---
+title: "DENA Moose Surveys History"
+output:
+  html_document:
+    number_sections: no
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Load libraries
+library(knitr)
+library(ggplot2)
+library(sp)
+library(sf)
+library(odbc)
+library(leaflet)
+
+# Build a database connection
+ConnectionString = 'Driver={SQL Server};Server=inpyugamsvm01\\nuna;Database=Moose;Trusted_connection=yes'
+Connection = dbConnect(odbc(),Driver = "Sql Server",Server = "inpyugamsvm01\\nuna", Database = "Moose")
+
+# Make kable show blanks for NAs
+options(knitr.kable.NA = '')
+
+# Function to convert a date string to a long date
+GetLongDate <- function(Date) {
+  return(format(as.Date(Date), format="%B %d, %Y "))
+}
+
+```
+
+# Known Surveys List
+```{r , echo=FALSE}
+
+# This query gets the survey details from the GSPE_Surveys database table
+Sql = paste("SELECT GSPE_Surveys.SurveyName, COUNT(GSPE.ID) AS n, GSPE_Surveys.Park,gspe_surveys.Investigator
+,(SELECT TOP 1 SurveyUnitSet FROM GSPE WHERE SurveyName =  GSPE_Surveys.SurveyName) as UnitSet
+FROM GSPE RIGHT OUTER JOIN
+GSPE_Surveys ON GSPE.SurveyName = GSPE_Surveys.SurveyName
+GROUP BY GSPE_Surveys.SurveyName, GSPE_Surveys.Park,gspe_surveys.Investigator
+HAVING        (GSPE_Surveys.Park = 'DENA')
+ORDER BY GSPE_Surveys.SurveyName",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+kable(DF)
+```
+
+# Known Survey Units List
+```{r , echo=FALSE}
+
+# This query gets the survey details from the GSPE_Surveys database table
+Sql = paste("SELECT GSPE_Surveys.SurveyName, COUNT(GSPE.ID) AS n, GSPE_Surveys.Park,gspe_surveys.Investigator
+,(SELECT TOP 1 SurveyUnitSet FROM GSPE WHERE SurveyName =  GSPE_Surveys.SurveyName) as UnitSet
+FROM GSPE RIGHT OUTER JOIN
+GSPE_Surveys ON GSPE.SurveyName = GSPE_Surveys.SurveyName
+GROUP BY GSPE_Surveys.SurveyName, GSPE_Surveys.Park,gspe_surveys.Investigator
+HAVING        (GSPE_Surveys.Park = 'DENA')
+ORDER BY GSPE_Surveys.SurveyName",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+kable(DF)
+```
+

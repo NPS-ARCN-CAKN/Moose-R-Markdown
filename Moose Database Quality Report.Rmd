@@ -1,0 +1,556 @@
+---
+title: "NPS Alaska Moose Monitoring Dataset Quality Report"
+output:
+  html_document:
+    number_sections: true
+    toc_float: true
+    toc: true
+    theme: default
+---
+
+
+Scott D. Miller  
+Information Technology Specialist/Data Manager  
+National Park Service, Arctic Inventory and Monitoring Program  
+240 W. 5th Ave.  
+Anchorage, AK 99501    
+
+`r format(Sys.Date(), format='%B %d, %Y')`
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Setup
+options(knitr.kable.NA = '')
+knitr::opts_chunk$set(echo = TRUE)
+
+# Allows downloading of R packages on NPS network
+options(download.file.method = "wininet")
+#install.packages('odbc')
+library(knitr)
+library(ggplot2)
+library(odbc)
+library(tidyverse)
+library(xfun)
+
+# Build a database connection
+Connection = dbConnect(odbc(),Driver = "Sql Server",Server = "inpyugamsvm01\\nuna", Database = "Moose")
+
+# Use the below for sequentially numbering tables and figures
+TableCounter = 1
+FigureCounter = 1
+
+```
+
+# Introduction
+
+```{r echo=FALSE}
+
+# This query gets the survey details from the GSPE_Surveys database table
+Sql = "SELECT   MIN(Year) AS Earliest, MAX(Year) AS Latest,Max(Year) - Min(Year) AS [Length of record]
+,count(distinct SurveyName) as [Number of known surveys]
+FROM            GSPE_Surveys
+ORDER BY Earliest"
+DF = dbGetQuery(Connection,Sql)
+
+
+
+# Paremeterize some stats from the above query to use in the markdown below
+Earliest = DF$Earliest
+Latest = DF$Latest
+LengthOfRecord = DF$`Length of record`
+TotalNumberOfSurveys = DF$`Number of known surveys`
+
+# This query gets the survey details from the GSPE_Surveys database table
+Sql = "select count(*) as RecoveredSurveysCount from dashboard where recordcount > 0"
+DF = dbGetQuery(Connection,Sql)
+
+RecoveredSurveys = DF$RecoveredSurveysCount
+RecoveredSurveysPct = round((RecoveredSurveys / TotalNumberOfSurveys)*100,0)
+
+OverviewBlurp = paste("Moose have been monitored in and around the National Parks in Alaska since before statehood. The National Park Service has compiled data, reports, memoranda, scanned field data collection forms, and other ancillary information about these surveys into a database to facilitate analysis, as well as to preserve the long-term informational quality of the data. This report is to accompany publication of the NPS Alaska Moose Monitoring dataset in order to provide context and provide a summary of the dataset's quality and known defects. The moose monitoring dataset covers moose surveys from 11 National Parks and 4 Inventory and Monitoring Networks from 1958 to present. Surveys primarily follow the GeoSpatial Estimator (GSPE) methodology (Kellie and DeLong, 2006) for more recent surveys and various other methodologies for earlier surveys. Data have been recovered for ",numbers_to_words(RecoveredSurveys)," (",RecoveredSurveysPct,"%) of the ",str_to_sentence(numbers_to_words(TotalNumberOfSurveys))," known surveys conducted in and around the Alaska National Parks. The earliest survey known to the National Park Service (NPS) is from ",Earliest," giving a total length of record of ",LengthOfRecord," years. ",sep='')
+
+```
+
+`r OverviewBlurp` This report summarizes the contents of the NPS Alaska moose monitoring database, as well as a summary of the quality of the dataset.
+
+# Dataset Sensitivity Statement
+
+**[SENSITIVE DATASET]**  
+NPS internal use only. This Dataset contains information about a species of commercial interest and may be subject to international and/or interagency data sharing agreements that preclude publication. Moose monitoring data is defined as sensitive through the following policies:
+
+Network Park Protected data memorandum
+
+| Network | Park | Memorandum |
+|--- | --- | --- |
+| ARCN | BELA | https://irma.nps.gov/DataStore/DownloadFile/624889 |
+| CAKN | DENA | Unpublished |
+| ARCN | GAAR | https://irma.nps.gov/DataStore/DownloadFile/624888 |
+| SWAN | KATM | https://irma.nps.gov/DataStore/DownloadFile/624924 |
+| SWAN | KEFJ | https://irma.nps.gov/DataStore/DownloadFile/624922 |
+| SWAN | LACL | https://irma.nps.gov/DataStore/DownloadFile/624923 |
+| ARCN | WEAR | (CAKR, KOVA, NOAT) https://irma.nps.gov/DataStore/DownloadFile/624887 |
+| CAKN | WRST | Unpublished |
+| CAKN | YUCH | Unpublished |
+
+# Methodologies
+
+Methodologies vary from simple (minimum counts, stratified, 'no-strat') to advanced ([Kellie and DeLong](https://winfonet.alaska.gov/sandi/moose/surveys/documents/GSPEOperationsManual.pdf), 2006) techniques accounting for sightability and habitat stratification based on moose density. Generally, later surveys follow established NPS protocols (Burch et al., 2012, Sorum et al., 2018) and standard operating procedures available for download from the NPS IRMA Data Store at the following links:
+
+| Network | Link |
+| --- | --- |
+| ARCN | [https://irma.nps.gov/DataStore/Reference/Profile/2222140](https://irma.nps.gov/DataStore/Reference/Profile/2222140) |
+| CAKN | [https://irma.nps.gov/DataStore/Reference/Profile/2220369](https://irma.nps.gov/DataStore/Reference/Profile/2220369) |
+
+Refer to the individual Park survey reports for early surveys conducted prior to the GSPE methodology.
+
+# Suggested citation 
+
+National Park Service. Moose Surveys Certified Dataset: NPS Arctic and Central Alaska Inventory and Monitoring Networks. Geospatial Dataset. (`r format(Sys.Date(), "%Y")`). Anchorage, AK. U.S.A.: National Park Service, Alaska Region Inventory and Monitoring Program. Available FTP or Access URL: https://irma.nps.gov/DataStore/Reference/Profile/2295396. [`r format(Sys.Date(), format='%B %d, %Y')`].
+
+# Moose surveys history by NPS unit
+
+Table `r TableCounter`, below, and Figure `r FigureCounter` show the history of moose surveys by NPS unit.
+
+```{r echo=FALSE,label="Known surveys by National Park unit."}
+Sql = "SELECT * FROM  Summary_RecoveredSurveysSummary"
+DF = dbGetQuery(Connection,Sql)
+
+# Output the table
+Caption = paste("Table ",TableCounter,". ",knitr::opts_current$get()$label,sep="")
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+```
+
+Figure `r FigureCounter` shows the history of moose surveys by park.
+
+```{r echo=FALSE}
+# Make a figure caption
+FigureCaption = paste("Figure ",FigureCounter,". Moose surveys history by Park.",sep="")
+```
+
+```{r echo=FALSE, label = "Surveys history by park",fig.cap=FigureCaption,fig.alt=FigureCaption}
+
+Sql = "SELECT        Park, Year, COUNT(DISTINCT SurveyName) AS Surveys
+FROM            GSPE_Surveys
+GROUP BY Park, Year
+ORDER BY Park, Year"
+DF = dbGetQuery(Connection,Sql)
+
+ggplot(DF) +
+  geom_bar(aes(x=Year)) +
+  facet_grid(rows=vars(Park)) +
+  scale_y_discrete(breaks=c(1,2,3)) +
+  theme_minimal() +
+  ggtitle("Moose surveys history by NPS unit, Alaska")
+
+```
+
+```{r echo=FALSE}
+# Increment the figure counter
+FigureCounter = FigureCounter + 1
+```
+
+# Survey reports and methodologies
+
+Methodologies have been continually improved over the history of moose monitoring in Alaska. Early surveys tended to be minimum count surveys. Over time sightability correction was introduced to improve population estimates by quantifying the number of animals that were likely missed by observers due to terrain, vegetation or other factors. Stratification methods were developed to cut down the number of units needing to be surveyed by eliminating areas with low moose density. Data consumers are encouraged to read the survey reports (Table `r TableCounter`), where available, to understand exactly how the surveys were conducted.
+
+```{r echo=FALSE,label="Moose surveys, methodologies and reports."}
+Sql = "SELECT 
+-- If there is a report IRMA reference code show the link, if there is just a report link THEN show that, otherwise show null
+CASE 
+	WHEN NULLIF(ReportReferenceCode,0) is not NULL THEN '[' + SurveyName + '](' + 'https://irma.nps.gov/DataStore/Reference/Profile/' + convert(varchar(20),ReportReferenceCode) + ')'
+	WHEN NULLIF(LTRIM(RTRIM(ReportLink)),'') is not NULL THEN '[' + SurveyName + '](' + ReportLink + ')'
+	else SurveyName
+END 
+as Link,Methodology
+FROM GSPE_Surveys
+ORDER BY SurveyName DESC"
+DF = dbGetQuery(Connection,Sql)
+
+# Output the table
+Caption = paste("Table ",TableCounter,". ",knitr::opts_current$get()$label,sep="")
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+```
+
+# Dataset certification status.
+
+The moose monitoring database follows a data certification model such that records are certified as being of analytical quality if their validity can be reinforced by a summary report, journal article, or other publish source. Table `r TableCounter` shows the number of records that have been certified.
+
+```{r echo=FALSE, label="Dataset certification status."}
+
+Sql = "SELECT
+	(SELECT count(*) FROM GSPE) as [GSPE records]
+	,(SELECT count(*) FROM GSPE where certificationlevel = 'Certified') as [Certified records]
+	,(SELECT count(*) FROM GSPE where certificationlevel <> 'Certified') as [Uncertified]"
+
+DF = dbGetQuery(Connection,Sql)
+
+Caption = paste("Table ",TableCounter,". ",knitr::opts_current$get()$label,sep="")
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+```
+
+
+# Certification status by park
+
+Table `r TableCounter` provides a summary of dataset certification by NPS unit.
+
+```{r echo=FALSE, label = "Certification status by park"}
+
+Sql = "SELECT Park, COUNT(SurveyName) AS [Known surveys]
+,(SELECT count(*) FROM dashboard d where d.park=s.park and isnull(RecordCount,0) = 0) as [Unrecovered surveys]
+
+--,(SELECT count(*) FROM dashboard d where d.park=s.park and PercentCertified = 0) as [Uncertified survey datasets]
+,(SELECT count(*) FROM dashboard d where d.park=s.park and PercentCertified > 0) as [Certified survey datasets]
+,convert(decimal(5,2),(SELECT count(*) FROM dashboard d where d.park=s.park and isnull(RecordCount,0) > 0)/convert(float,COUNT(SurveyName))) as [Proportion recovered]
+,convert(decimal(6,2),(SELECT count(*) FROM dashboard d where d.park=s.park and PercentCertified = 1)/
+	(nullif(convert(float,Count(Surveyname)) - (SELECT count(*) FROM dashboard d where d.park=s.park and isnull(RecordCount,0) = 0),0)))  as [Proportion of recovered certified]
+,(SELECT min(year) as Earliest FROM GSPE_surveys g where g.park=s.park) as Earliest
+,(SELECT max(year) as Earliest FROM GSPE_surveys g where g.park=s.park) as Latest
+,(SELECT count(id) FROM GSPE g where g.park=s.park) as [Total records]
+FROM     GSPE_Surveys s
+GROUP BY Park
+ORDER BY Park"
+DF = dbGetQuery(Connection,Sql)
+
+# Output the table
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+
+```
+
+# Quality Control Checks
+
+Quality control is an important part of the long-term moose monitoring program in the National Parks of Alaska. The moose monitoring database has numerous automated quality control queries that can elucidate problem areas for correction. Some data defects cannot be rectified, and in such cases these defects have been documented. This section reports the results of quality control checks.
+
+## Surveys missing records (Empty surveys)
+
+Some moose surveys are known from the literature, but the data have been lost. Table `r TableCounter` lists such surveys.
+
+```{r echo=FALSE, label = "Surveys missing records (Empty surveys) - Count."}
+
+Sql = "SELECT count(*) as [Surveys missing records] FROM Dashboard where RecordCount = 0"
+DF = dbGetQuery(Connection,Sql)
+
+# Output the table
+Caption = paste("Table ",TableCounter,". ",knitr::opts_current$get()$label,sep="")
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+
+```
+
+```{r echo=FALSE, label = "Surveys missing records (Empty surveys)."}
+
+Sql = "SELECT TOP 100 percent SurveyName,RecordCount,PolygonsCount,PercentCertified FROM Dashboard where RecordCount = 0 
+ORDER BY SurveyName DESC"
+DF = dbGetQuery(Connection,Sql)
+
+# Output the table
+Caption = paste("Table ",TableCounter,". ",knitr::opts_current$get()$label,sep="")
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+
+```
+
+SQL: `r Sql`
+
+## Surveys with missing units
+
+Ideally the survey unit boundaries should be known for each moose unit surveyed. Occasionally, these units have been lost entirely, or certain individual units are missing for other reasons (a unit may have been added spontaneously, or a unit may have been subdivided without documentation). Table `r TableCounter` lists surveys with missing units.
+
+```{r echo=FALSE, label = "Surveys having missing survey unit polygons."}
+
+
+Sql = "SELECT Year, Park, SurveyName, RecordCount, PolygonsCount,RecordCount-PolygonsCount as NullFeature, PercentCertified, Methodology
+FROM     Dashboard where recordcount>0 and PolygonsCount<>recordcount
+ORDER BY SurveyName DESC"
+DF = dbGetQuery(Connection,Sql)
+
+# Output the table
+Caption = paste("Table ",TableCounter,". ",knitr::opts_current$get()$label,sep="")
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+
+```
+
+SQL: `r Sql`
+
+## Surveys with records and units but not yet certified
+
+As moose survey data is pulled into the moose monitoring database they are presumed to be raw data unsuitable for analysis. If supporting reports, summaries, or other validating documentation is available and the results match the imported data, then the data for the survey can be certified. Table `r TableCounter` lists surveys that have not yet been certified.
+
+```{r echo=FALSE, label = "Surveys with records and units but not yet certified."}
+
+Sql = "SELECT TOP 100 percent [Year],Park,SurveyName,RecordCount,PolygonsCount,PercentCertified,Comments FROM Dashboard 
+where (RecordCount > 0 and PolygonsCount > 0 And PercentCertified < 1) order by Park,[Year],SurveyName"
+DF = dbGetQuery(Connection,Sql)
+
+# Output the table
+Caption = paste("Table ",TableCounter,". ",knitr::opts_current$get()$label,sep="")
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+
+```
+
+SQL: `r Sql`
+
+
+## Surveys with no dates
+
+The following QC check lists surveys for which the survey date has not been recorded.
+
+```{r echo=FALSE, label = "Surveys with no dates."}
+
+Sql = "SELECT 
+case 
+	when NULLIF(ReportReferenceCode,0) is not NULL then '[' + SurveyName + '](' + 'https://irma.nps.gov/DataStore/Reference/Profile/' + convert(varchar(20),ReportReferenceCode) + ')'
+	when NULLIF(LTRIM(RTRIM(ReportLink)),'') is not NULL then '[' + SurveyName + '](' + ReportLink + ')'
+	else SurveyName
+END as Report
+FROM            QC_SurveysWithNoDates
+ORDER BY SurveyName"
+DF = dbGetQuery(Connection,Sql)
+
+# Output the table
+Caption = paste("Table ",TableCounter,". ",knitr::opts_current$get()$label,sep="")
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+
+```
+
+SQL: `r Sql`
+
+## Certified records missing polygons
+
+The following surveys have no survey unit polygons, but have been certified.
+
+```{r echo=FALSE, label = "Certified records missing polygons (these should be de-certified)."}
+
+Sql = "SELECT SurveyName,RecordCount,PolygonsCount,PercentCertified
+--,'UPDATE GSPE Set CertificationLevel=''Raw'',CertifiedBy=NULL,CertificationDate=NULL WHERE SurveyName=''' + surveyname + '''' as UpdateQuery
+FROM dashboard where PercentCertified > 0 and PolygonsCount = 0"
+DF = dbGetQuery(Connection,Sql)
+
+# Output the table
+Caption = paste("Table ",TableCounter,". ",knitr::opts_current$get()$label,sep="")
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+
+```
+
+SQL: `r Sql`
+
+## Certified datasets missing validation details
+
+The following surveys are missing validation details.
+
+```{r echo=FALSE, label = "Certified datasets missing validation details."}
+
+Sql = "SELECT SurveyName,PercentCertified,ValidatedDate,ValidatedBy FROM dashboard where (PercentCertified > 0) and (ValidatedBy is NULL or ValidatedDate is NULL) 
+ORDER BY Park,Year"
+DF = dbGetQuery(Connection,Sql)
+
+# Output the table
+Caption = paste("Table ",TableCounter,". ",knitr::opts_current$get()$label,sep="")
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+
+```
+
+SQL: `r Sql`
+
+## Surveys where Park or Network is NULL
+
+The following surveys have not been assigned to a Park or I&M Network.
+
+```{r echo=FALSE, label = "Surveys where Park or Network is NULL."}
+
+Sql = "
+SELECT DISTINCT SurveyName, Network
+FROM     GSPE_Surveys
+WHERE  ((Network IS NULL) OR  (Rtrim(Ltrim(Network)) = '')) or ((Park is NULL) or (Rtrim(Ltrim(Park))='')) order by surveyname"
+DF = dbGetQuery(Connection,Sql)
+
+# Output the table
+Caption = paste("Table ",TableCounter,". ",knitr::opts_current$get()$label,sep="")
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+
+```
+
+SQL: `r Sql`
+
+## Total calves don't add up correctly
+
+The results for the quality control check shown below, if any, show surveys for which the CALF column may have been summed incorrectly. There may be conditions under which you should ignore this QC check. Examine the survey data carefully before making changes.
+
+```{r echo=FALSE, label = "Total calves don't add up correctly."}
+
+Sql = "SELECT Distinct(SurveyName) FROM QC_PossibleCalfCountErrors_Surveys order by surveyname"
+DF = dbGetQuery(Connection,Sql)
+
+# Output the table
+Caption = paste("Table ",TableCounter,". ",knitr::opts_current$get()$label,sep="")
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+
+```
+
+SQL: `r Sql`
+
+## Total cows don't add up correctly
+
+The results for the quality control check shown below, if any, show surveys for which the COW column may have been summed incorrectly. There may be conditions under which you should ignore this QC check. Examine the survey data carefully before making changes.
+
+```{r echo=FALSE, label = "Total cows don't add up correctly."}
+
+Sql = "SELECT Distinct SurveyName FROM QC_PossibleCowCountErrors_Surveys order by surveyname"
+DF = dbGetQuery(Connection,Sql)
+
+# Output the table
+Caption = paste("Table ",TableCounter,". ",knitr::opts_current$get()$label,sep="")
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+
+```
+
+SQL: `r Sql`
+
+## Total bulls don't add up correctly
+
+The results for the quality control check shown below, if any, show surveys for which the BULL_ALL column may have been summed incorrectly. There may be conditions under which you should ignore this QC check. An example would be if the crew recorded total bulls seen, in addition to any categorized bulls. For example, if the crew recorded BULL_ALL and YBULL_ALL (1981 DENA Moose Survey), then the QC check here will be false. Examine the survey data carefully before making changes.
+
+```{r echo=FALSE, label = "Total bulls don't add up correctly."}
+
+Sql = "SELECT Distinct SurveyName FROM QC_PossibleBullCountErrors_Surveys order by surveyname"
+DF = dbGetQuery(Connection,Sql)
+
+# Output the table
+Caption = paste("Table ",TableCounter,". ",knitr::opts_current$get()$label,sep="")
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+
+```
+
+SQL: `r Sql`
+
+## Total adults don't add up correctly
+
+This quality control check shows surveys where there may be an error in summing the number of adults. While this check may show problems, it's important to remember that there may be conditions under which the Adults value may be correct. The QC check sums total bulls and cows. If either of these categories were omitted from the survey, but the total number of adults was included, then this QC check will give incorrect results. Examples of false positives:
+
+* UNKNOWN moose may have been summed into the ADULT category by the survey leader. The quality control check does not do this.
+* The survey may have only censused ADULTs and CALFs.
+* The survey may have only censused various bull categories and calves.
+
+Use judgement in addressing any issues related to this QC check.
+
+```{r echo=FALSE, label = "Total adults don't add up correctly."}
+
+Sql = "SELECT Distinct SurveyName FROM QC_PossibleAdultCountErrors_Records ORDER BY SurveyName"
+DF = dbGetQuery(Connection,Sql)
+
+# Output the table
+Caption = paste("Table ",TableCounter,". ",knitr::opts_current$get()$label,sep="")
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+
+```
+
+SQL: `r Sql`
+
+## Total moose don't add up correctly
+
+This quality control check shows surveys where there may be an error in summing the number of adults and calves. While this check may show problems, it's important to remember that there may be conditions under which the QC check will give false positives:
+
+* UNKNOWN moose may, or may not have been summed into the MOOSE category category by the survey leader. 
+* The survey may have only censused ADULTs and CALFs; Non-NULL MOOSE values may be confusing in this case.
+* The survey may have only censused various bull categories and calves; Non-NULL MOOSE values may be confusing in this case.
+* The crew may have surveyed for MOOSE and other categories but not COW and/or BULL_ALL.
+
+Use judgement in addressing any issues related to this QC check.
+
+```{r echo=FALSE, label = "Total moose don't add up correctly"}
+Sql = "SELECT distinct SurveyName FROM QC_PossibleMooseCountErrors_Records ORDER BY SurveyName"
+DF = dbGetQuery(Connection,Sql)
+
+# Output the table
+Caption = paste("Table ",TableCounter,". ",knitr::opts_current$get()$label,sep="")
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+```
+
+SQL: `r Sql`
+
+## Spatial coordinates range checks
+
+This quality control check shows the maximum and minimum longitude and latitude values from the GSPE data table. The values should be reasonable for moose surveys in Alaska (longitudes should be negative, roughly between -168 and -139, latitudes positive and between roughly 60 and 70)
+
+```{r echo=FALSE, label = "Spatial coordinates range checks."}
+Sql = "SELECT min(x_coord) as XCOORD_Minimum, Max(x_coord) as XCOORD_Maximum
+, min(y_coord) as YCOORD_Minimum, Max(Y_coord) as YCOORD_Maximum
+FROM GSPE"
+DF = dbGetQuery(Connection,Sql)
+
+# Output the table
+Caption = paste("Table ",TableCounter,". ",knitr::opts_current$get()$label,sep="")
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+```
+
+SQL: `r Sql`
+
+## Missing data resources directory
+
+```{r echo=FALSE, label = "Missing data resources directory."}
+Sql = "SELECT GSPE_Surveys.SurveyName, GSPE_Surveys.DataResourcesDirectory, COUNT(GSPE.ID) AS RecordsCount
+FROM     GSPE_Surveys INNER JOIN
+                  GSPE ON GSPE_Surveys.SurveyName = GSPE.SurveyName
+GROUP BY GSPE_Surveys.SurveyName, GSPE_Surveys.DataResourcesDirectory
+HAVING (GSPE_Surveys.DataResourcesDirectory IS NULL) AND (COUNT(GSPE.ID) > 0) OR
+                  (LTRIM(RTRIM(GSPE_Surveys.DataResourcesDirectory)) = '')"
+DF = dbGetQuery(Connection,Sql)
+
+# Output the table
+Caption = paste("Table ",TableCounter,". ",knitr::opts_current$get()$label,sep="")
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+```
+
+SQL: `r Sql`
+
+
+# Metadata
+
+Columns descriptions for the GSPE data table are shown in `r TableCounter`.
+
+```{r echo=FALSE, label = "Dataset columns descriptions."}
+Sql = "SELECT
+--[Table],
+      [Column],[ColumnDescription]
+      ,[DataType]
+      ,[Length]
+      ,[Precision]
+      ,[Scale]
+      ,[Nullable]
+FROM [Moose].[dbo].[DatabaseColumnsDescriptions] where [table] = 'GSPE' order by [Column]"
+DF = dbGetQuery(Connection,Sql)
+
+# Output the table
+Caption = paste("Table ",TableCounter,". ",knitr::opts_current$get()$label,sep="")
+kable(DF, caption = Caption)
+TableCounter = TableCounter + 1
+```
+
+# References
+
+Burch, J., T. Meier, and J. Lawler. 2012. [Moose monitoring protocol for the Central Alaska Network](https://irma.nps.gov/DataStore/DownloadFile/446704). Natural Resource Report NPS/CAKN/NRR—2012/494. National Park Service, Fort Collins, Colorado.
+
+[Kellie, K. A. and R. A. DeLong. 2006. Geospatial survey operations manual. Alaska Department of Fish and Game. Fairbanks, Alaska. 55 pp.](https://winfonet.alaska.gov/sandi/moose/surveys/documents/GSPEOperationsManual.pdf)
+
+Sorum, M., K. Joly, and S. Miller. 2018. [Moose monitoring protocol for the Arctic Inventory and Monitoring Network](https://irma.nps.gov/DataStore/DownloadFile/703042). Natural Resource Report NPS/ARCN/NRR—2018/1728. National Park 
+Service, Fort Collins, Colorado.
+
+
+

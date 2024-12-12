@@ -1,0 +1,205 @@
+```{r echo=FALSE}
+
+# Replace with the survey you'd like to report on
+SurveyName = "1997 YUCH Moose Survey"
+
+```
+
+---
+title: "Moose Survey Database Contents Summary"
+author: ""
+date: ""
+output:
+  html_document:
+  toc: yes
+---
+
+# `r SurveyName`
+
+```{r setup, include=FALSE}
+
+# Setup
+options(knitr.kable.NA = '')
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(RODBC)
+library(sf)
+library(ggplot2)
+
+# Restrain the number of decimal places
+options(digits = 1) 
+
+# Database connection string
+Connection =  odbcDriverConnect('Driver={SQL Server};Server=inpyugamsvm01\\nuna;Database=Moose;Trusted_connection=yes')
+
+# Function that returns a data frame from an SQL query on the database
+# SQL: A valid SQL query
+GetDataFrame <- function(SQL) { # create a function with the name my_function
+  DF = sqlQuery(Connection,SQL)
+  return(DF)
+}
+
+# Function to convert a data frame of Lat/Lon pairs to a spatial data frame
+# DataFrame: A data frame containing a latitude field and a longitude field
+# LatitudeFieldName: The name of the field containing latitude data
+# LongitudeFieldName: The name of the field containing longitude data
+GetPointSpatialDataFrameFromDataFrame = function(DataFrame,LatitudeFieldName,LongitudeFieldName){
+  
+  # Convert the data frame into a spatial data frame
+  SDF <- sf::st_as_sf(DataFrame, coords = c(LongitudeFieldName,LatitudeFieldName))
+
+  # Set the coordinate system to GCS Lat\Lon WGS1984
+  st_crs(SDF) <- st_crs(4326)
+  
+  return(SDF)
+}
+
+# Function that returns an Markdown compatible URL to the IRMA Data Store for the submitted ReferenceCode parameter
+GetIRMALinkFromReferenceCode = function(ReferenceCode){
+  return(paste("[https://irma.nps.gov/DataStore/Reference/Profile/",ReferenceCode,"](https://irma.nps.gov/DataStore/Reference/Profile/",ReferenceCode,")",sep=""))
+}
+
+# Counters to increment the table and figure numbers as the report progresses.
+TableCount = 1
+FigureCount = 1
+
+```
+
+Scott D. Miller\
+Information Technology Specialist/Data Manager\
+National Park Service, Arctic Inventory and Monitoring Network\
+240 W. 5th Ave.\
+Anchorage, AK 99501
+
+
+```{r label="Dashboard", echo=FALSE}
+
+# Get the summarized data for the comp count survey into a data frame
+Sql = paste("SELECT 
+SurveyName
+, [Year]
+, Network
+, Park
+, Season
+, StartDate
+, EndDate
+, StartMonth
+, EndMonth
+, AreaSurveyed_mi
+, AverageSearchEffort
+, Methodology
+, ProtocolVersion
+, ProtocolReferenceCode
+, Personnel
+, ReportReferenceCode
+, ReportLink
+, DeliverablesDatasetReferenceCode
+, DataSource
+, DataResourcesDirectory
+, Abstract
+, Summary
+, DatasetProcessingSteps
+, Comments
+FROM GSPE_Surveys
+WHERE (SurveyName = '",SurveyName,"')",sep="")
+
+DashboardDF = GetDataFrame(Sql)
+Abstract = DashboardDF$Abstract
+Summary  = DashboardDF$Summary
+DatasetProcessingSteps = DashboardDF$DatasetProcessingSteps
+Comments = DashboardDF$Comments
+
+```
+# Abstract
+
+`r Abstract`
+
+# Details
+
+```{r label="Details", echo=FALSE}
+data3 <- subset(DashboardDF, select = - c(Abstract,Summary,DatasetProcessingSteps,Comments)) 
+kable(t(data3))
+
+```
+
+# Summary
+
+`r Summary`
+
+# Results
+
+## Counts
+```{r label="Results-counts", echo=FALSE}
+
+# Get the summarized data for the comp count survey into a data frame
+Sql = paste("SELECT
+ COW_W_0
+, COW_W_1
+, COW_W_2
+, COW_W_3
+, COW
+, CALF
+, YBULL_SF
+, YBULL_GTSF
+, SM_BULL
+, MED_BULL
+, MED_L_BULL
+, LG_BULL
+, BULL_30_40
+, BULL_30_50
+, BULL_30_60
+, BULL_41_50
+, BULL_GT_50
+, BULL_GT_60
+, BULL_GTE_50
+, BULL_LT_30
+, BULL_LT_50
+, YBULL_ALL
+, BULL_ALL
+, UNKNOWN
+, ADULT
+, MOOSE
+, N as n
+FROM Summary_TotalCountsBySurvey
+WHERE (SurveyName = '",SurveyName,"')",sep="")
+
+ResultsDF = GetDataFrame(Sql)
+kable(t(ResultsDF))
+
+```
+
+# Metrics
+
+```{r label="Results-metrics", echo=FALSE}
+options("digits" = 2)
+# Get the summarized data for the comp count survey into a data frame
+Sql = paste("SELECT
+Area_SqMi
+, Area_SqKm
+, [Calves: 100 cows]
+, [Bulls: 100 cows]
+, [Calves: 100 adults]
+, [Minimum density (unadjusted moose/sq. mi.)]
+, [Area_SqMi, counted]
+, [N, counted]
+, [N, not counted]
+, [N, Counted is NULL]
+, [Proportion of units counted]
+FROM Summary_TotalCountsBySurvey
+WHERE (SurveyName = '",SurveyName,"')",sep="")
+
+ResultsDF = GetDataFrame(Sql)
+kable(t(ResultsDF))
+
+```
+
+# Dataset processing steps
+
+`r DatasetProcessingSteps`
+
+# Comments
+
+`r Comments`
+
+
+

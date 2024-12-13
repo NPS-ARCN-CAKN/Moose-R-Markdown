@@ -10,10 +10,21 @@ output:
 
 ```{r setup, include=FALSE, echo=FALSE}
 
-# Enter a valid SurveyName from the moose monitoring database
-SurveyName = '2023 WRST Moose Survey'
+# START HERE: Enter a valid SurveyName below
+SurveyName = '2022 YUCH Fall Moose Survey'
 
+# You can get a list of SurveyNames by uncommenting the three lines below:
+#SurveyNamesQuery = "SELECT DISTINCT SurveyName FROM GSPE_Surveys ORDER BY SurveyName" # Query to get a list of survey names
+# SurveyNamesDataFrame = dbGetQuery(Connection,"SELECT DISTINCT SurveyName FROM GSPE_Surveys ORDER BY SurveyName") # Builds a data frame from the query above
 
+# DOCUMENTATION
+# This R Markdown file generates a skeleton summary report for an NPS Alaska Region Moose Survey. 
+# The user can flesh out the report as needed.
+# Author: NPS\SDMiller 
+# Date: 2024-12-11
+# Ensure your moose survey data is in the regional Moose SQL Server database and you
+# have at minimum datareader permissions on the database.
+ 
 # Load libraries
 library(knitr)
 library(ggplot2)
@@ -23,26 +34,8 @@ library(odbc)
 library(leaflet)
 library(sqldf)
 
-# Database connection 
-#Connection = odbcDriverConnect(connection = "Driver=SQL Server Native Client 11.0;Server=inpyugamsvm01\\nuna;Database=Moose;trusted_connection=YES")
-
 # Build a database connection
 Connection = dbConnect(odbc(),Driver = "Sql Server",Server = "inpyugamsvm01\\nuna", Database = "Moose")
-
-# DOCUMENTATION
-# This R Markdown file generates a skeleton summary report for an NPS Alaska Region Moose Survey. 
-# The user can flesh out the report as needed.
-# Author: NPS\SDMiller 
-# Date: 2023-12-21
-# Ensure your moose survey data is in the regional Moose SQL Server database and you
-# have at minimum datareader permissions on the database.
-# Set up the report parameters below before running.
-
-# Start by entering a valid SurveyName above from the Moose database (\\inpyugamsvm01\nuna:Moose) on which to build the report
-
-# You can get a list of SurveyNames by uncommenting the three lines below:
-# SurveyNamesQuery = "SELECT DISTINCT SurveyName FROM GSPE_Surveys ORDER BY SurveyName" # Query to get a list of survey names
-# SurveyNamesDataFrame = dbGetQuery(Connection,"SELECT DISTINCT SurveyName FROM GSPE_Surveys ORDER BY SurveyName") # Builds a data frame from the query above
 
 # Make kable show blanks for NAs
 options(knitr.kable.NA = '')
@@ -208,7 +201,7 @@ Table 1. Survey details,  `r SurveyName`.
 
 ```{r,label="Get Dashboard data",echo=FALSE}
 #kable(DetailsDF_t, caption = "Survey details")
-kable(t(GSPE_SurveysDF),caption = "Survey summary")
+kable(t(GSPE_SurveysDF),caption = "Survey summary", format = "html", escape = TRUE)
 
 Sql = paste("SELECT 
 -- Year, Park, Network, SurveyName
@@ -233,7 +226,7 @@ FROM Dashboard WHERE SurveyName = '",SurveyName,"'",sep='')
 DashboardDF = dbGetQuery(Connection,Sql) 
 DashboardDF_t = t(DashboardDF)
 #colnames(DashboardDF_t) = ""
-kable(DashboardDF_t)
+kable(DashboardDF_t, escape = TRUE)
 
 ```
 
@@ -242,7 +235,6 @@ kable(DashboardDF_t)
 # Survey Area
 
 The survey area for the `r SurveyName` is shown in the map below (Figure 1).
-<!--  Table 2 provides information about the survey units including boundaries, center points and area. -->
 
 ```{r,label="Get spatial data and generate a map", echo = FALSE}
 
@@ -262,20 +254,33 @@ SurveyName = '",SurveyName,"'",sep='')
 Connection = dbConnect(odbc(),Driver = "Sql Server",Server = "inpyugamsvm01\\nuna", Database = "Moose")
 
 # Get the data using the odbc method
-DF = dbGetQuery(Connection,Sql)
+Units = dbGetQuery(Connection,Sql)
+
+# Now get the units having data (Moose > 0)
+Sql = paste("SELECT ID,Counted,Moose
+,Feature.EnvelopeCenter().Lat As Lat
+, Feature.EnvelopeCenter().Long as Lon
+, Feature.STArea() / 1000000 as Area_SqKm
+, Feature.STArea() / 2589988.110336 as Area_SqMi
+, SurveyUnitSet
+, Feature.STAsBinary() AS Geog 
+FROM Dataset_GSPE 
+WHERE SurveyName = '",SurveyName,"' And Moose > 0",sep='')
+UnitsWithMooseDF = dbGetQuery(Connection,Sql)
 
 # If there are survey units associated with the study, then show them
-if (nrow(DF) == 0){
+if (nrow(Units) == 0){
   print("There are no survey units associated with this survey")
 } else {
-  bboxdf = sqldf("SELECT Min(Lat) as MinLat,Max(Lat) as MaxLat,Min(Lon) as MinLon,Max(Lon) as MaxLon FROM DF")
+  bboxdf = sqldf("SELECT Min(Lat) as MinLat,Max(Lat) as MaxLat,Min(Lon) as MinLon,Max(Lon) as MaxLon FROM Units")
   
   # Convert the data frame into a spatial data frame using sf package
-  # Exclude NA geographies
-  SpatialDF <- sf::st_as_sf(subset(DF,!is.na(DF[,'Geog'])))
-   
+  UnitsSpatialDF <- sf::st_as_sf(subset(Units,!is.na(Units[,'Geog'])))
+  UnitsWithMooseSpatialDF  <- sf::st_as_sf(subset(UnitsWithMooseDF,!is.na(UnitsWithMooseDF[,'Geog'])))
+  
   # Set the coordinate system to GCS Lat\Lon WGS1984
-  st_crs(SpatialDF) <- st_crs(4326)
+  st_crs(UnitsSpatialDF) <- st_crs(4326)
+  st_crs(UnitsWithMooseSpatialDF) <- st_crs(4326)
   
   # Load in the park boundaries geojson file from Data Store
   # Reference URL: https://irma.nps.gov/DataStore/Reference/Profile/2303652
@@ -285,32 +290,39 @@ if (nrow(DF) == 0){
   # Expansion factor to add to bounding box values so there is a little space between the units and the polygons
   expansionFactor = 1.002
   
-  # Plot the units in ggplot
-  # If this is a GSPE survey there will be too many units for labels to show neatly
-  # The first option omits labels, the second includes them
-  if (is.na(DF[1,"SurveyUnitSet"])== FALSE & DF[1,"SurveyUnitSet"] == "ADFG GSPE"){
+    # Plot the GSPE data
     ggplot() +
-    geom_sf(data=AK_Parks,fill="lightgray",color="darkgray") + # Park boundaries
-    geom_sf(data = SpatialDF) + # Survey units
-    #geom_text(data = SpatialDF, mapping = aes(x = Lon, y = Lat, label = ID), size = 3, color = "black") + # Unit labels
-    coord_sf(xlim = c(bboxdf$MinLon, bboxdf$MaxLon),ylim = c(bboxdf$MinLat,bboxdf$MaxLat),expand=TRUE) + # Limit to bounding box of surveyed units
-    theme_minimal() # Minimal theme
-  } else {
-  
-      ggplot() +
+      # Park boundary
       geom_sf(data=AK_Parks,fill="lightgray",color="darkgray") + # Park boundaries
-      geom_sf(data = SpatialDF,aes(fill=Counted)) + # Survey units
-      geom_text(data = SpatialDF, mapping = aes(x = Lon, y = Lat, label = ID), size = 3, color = "black") + # Unit labels
-      coord_sf(xlim = c(bboxdf$MinLon * expansionFactor, bboxdf$MaxLon * 1/expansionFactor),ylim = c(bboxdf$MinLat * 1/expansionFactor,bboxdf$MaxLat * expansionFactor),expand=TRUE) + # Limit to bounding box of surveyed units
+    
+      # Survey units
+      geom_sf(data = UnitsSpatialDF,alpha=0) + # Survey units
+      
+      # Survey units having observed moose
+      geom_sf(data = UnitsWithMooseSpatialDF,aes(fill=Moose)) + 
+      
+      geom_text(data = UnitsWithMooseSpatialDF, mapping = aes(x = Lon, y = Lat, label = Moose), size = 3, color = "black") + # Unit labels
+    
+      # Limit the map to the area around the survey units
+      coord_sf(xlim = c(bboxdf$MinLon, bboxdf$MaxLon),ylim = c(bboxdf$MinLat,bboxdf$MaxLat),expand=TRUE) + # Limit to bounding box of surveyed
+    
+      # Set the scale for moose observed
+      scale_fill_gradient(low = "gray", high = "black") + 
+      
       theme_minimal() # Minimal theme
     
-  }
 
+
+
+}
+
+```
+```{r,label="Map using Leaflet",echo=FALSE}
   # Map the units in Leaflet
   # leaflet() %>%
   #   
   #   # Set the view parameters and zoom level
-  #   setView(lng = mean(SpatialDF$Lon), lat = mean(SpatialDF$Lat), zoom = 10) %>%
+  #   setView(lng = mean(UnitsSpatialDF$Lon), lat = mean(UnitsSpatialDF$Lat), zoom = 10) %>%
   #   
   #   # Add map tiles for the background from web map service
   #   addWMSTiles(
@@ -320,26 +332,25 @@ if (nrow(DF) == 0){
   #   )  %>%
   #   
   #   # Add the moose units (polygons are in the Geog attributes)
-  #   addPolygons(data=SpatialDF$Geog,color = "black", weight = 1, smoothFactor = 0.5, fillOpacity = 0.1) %>%
+  #   addPolygons(data=UnitsSpatialDF$Geog,color = "black", weight = 1, smoothFactor = 0.5, fillOpacity = 0.1) %>%
   #   
   #   # Add labels
-  #   addLabelOnlyMarkers(~Lon,~Lat, label = ~ID, data = SpatialDF, labelOptions = labelOptions(noHide = TRUE))
-
-}
+  #   addLabelOnlyMarkers(~Lon,~Lat, label = ~ID, data = UnitsSpatialDF, labelOptions = labelOptions(noHide = TRUE))
 
 ```
+
 
 Figure 1. Map of survey units, `r SurveyName`. Park boundary is shown in gray. 
 
 ```{r,label="Get survey units area data", echo=FALSE}
 
 # Get a data frame of units and their area to present to the report
-UnitsDF = DF[,c("ID","Lat","Lon","Area_SqKm","Area_SqMi")] 
-colnames(UnitsDF) = c("ID","Latitude","Longitude","Area (Sq. km)","Area (Sq. mi.)")
-
-TotalAreaKm = sum(UnitsDF$`Area (Sq. km)`,na.rm=TRUE)
-TotalAreaMi = sum(UnitsDF$`Area (Sq. mi.)`,na.rm=TRUE)
-n = colSums(!is.na(UnitsDF))[4] # Count of the number of units with area
+# UnitsDF = Units[,c("ID","Lat","Lon","Area_SqKm","Area_SqMi")] 
+# colnames(UnitsDF) = c("ID","Latitude","Longitude","Area (Sq. km)","Area (Sq. mi.)")
+# 
+# TotalAreaKm = sum(Units$`Area (Sq. km)`,na.rm=TRUE)
+# TotalAreaMi = sum(Units$`Area (Sq. mi.)`,na.rm=TRUE)
+# n = colSums(!is.na(UnitsDF))[4] # Count of the number of units with area
 
 ```
 
@@ -451,6 +462,8 @@ Appendix B contains a list of quality control procedures and processing steps th
 
 ```{r,label="Write the report to the survey directory", echo=FALSE}
 
+
+
 # This template will output to an html file named MooseSurveyReport.htms
 # Rename it and copy it to the survey directory if it exists
 # Otherwise rename it in the current directory
@@ -458,6 +471,7 @@ From = "MooseSurveyReport.html"
 
 # Set up the source file title
 ReportTitle = paste(SurveyName," Summary.html",sep="")
+
 
 # Check if the survey directory exists
 # Set up a destination file path for the file copy operation
@@ -469,15 +483,17 @@ if (dir.exists(DashboardDF$DataResourcesDirectory)) {
 
 # Try to copy the file to the destination
 tryCatch({
+  
   file.copy(From, To, overwrite = TRUE)
+  #Where to get the report
+  message(paste("Survey report ",From," generated and and copied to ",To,sep=""))
+  
 }, error = function(e) {
+  
   # An error happened
   message("Error: ", e$message)
+  
 })
-
-#Where to get the report
-print(paste("Survey report generated in ",From," and copied to ",To,sep=""))
-
 
 
 ```

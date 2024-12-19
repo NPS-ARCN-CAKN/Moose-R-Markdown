@@ -4,14 +4,17 @@ author: ""
 date: ""
 output:
   html_document:
-    number_sections: no
-    toc: no
+    toc: true
+    toc_float: true
+    toc_depth: 4
+    collapsed: false
+    smooth_scroll: false
 ---
 
 ```{r setup, include=FALSE, echo=FALSE}
 
 # START HERE: Enter a valid SurveyName below
-SurveyName = '2024 DENA Moose Survey'
+SurveyName = '2023 WRST Moose Survey'
 
 # You can get a list of SurveyNames by uncommenting the three lines below:
 #SurveyNamesQuery = "SELECT DISTINCT SurveyName FROM GSPE_Surveys ORDER BY SurveyName" # Query to get a list of survey names
@@ -52,7 +55,7 @@ GetLongDate <- function(Date) {
 # These counters are used to number the tables and figures. Each gets incremented after use.
 TableCounter = 1
 FigureCounter = 1
-
+QCTestCounter = 1
 ```
 
 ```{r,label="Get Dashboard data",echo=FALSE}
@@ -84,13 +87,130 @@ DashboardDF_t = t(DashboardDF)
 
 # Quality Control Report: `r SurveyName`
 
-## Summary
+Scott D. Miller\
+Information Technology Specialist National Park Service, Arctic Inventory and Monitoring Network\
+240 W. 5th Ave\
+Anchorage, AK 99501
 
-```{r,echo=FALSE, tab.cap=paste("Table ",TableCounter,". Survey summary.",sep=""), label="Summary table"}
-#colnames(DashboardDF_t) = ""
+`r format(Sys.Date(), "%B %d, %Y")`
+
+# Introduction
+
+Moose surveys are conducted in Alaska by the National Park Service. Field data are collected during surveys and then ingested into a master database. This report shows the results of numerous automated quality control procedures in order to provide feedback on data deficiencies to be resolved or documented. The results presented here are not intended for publication, but to provide a snapshot-in-time assessment of the quality of the data collected during a survey.
+
+This report was generated from an R Markdown file available at <https://github.com/NPS-ARCN-CAKN/Moose-R-Markdown>
+
+# Abstract
+
+```{r echo=FALSE, label = "Abstract"}
+
+# Run the quality control query
+Sql = paste("SELECT Abstract FROM GSPE_Surveys WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+knitr::kable(DF)
+TableCounter = TableCounter + 1 
+
+```
+
+# Dataset Dashboard
+
+```{r,echo=FALSE, tab.cap=paste("Table ",TableCounter,". Dataset dashboard.",sep=""), label="Dashboard"}
 kable(DashboardDF_t, escape = TRUE)
 ```
 
+# Map
+
+The survey area for the `r SurveyName` is shown in the map below (Figure 1).
+
+```{r,label="Get spatial data and generate a map", echo = FALSE}
+
+# Query the survey units. The polygons are in the Feature attribute
+Sql = paste("SELECT ID,Counted,CASE WHEN SubArea IS NULL Then IsNULL(Park,'Park') ELSE SubArea End As SubArea
+,Feature.EnvelopeCenter().Lat As Lat
+, Feature.EnvelopeCenter().Long as Lon
+, Feature.STArea() / 1000000 as Area_SqKm
+, Feature.STArea() / 2589988.110336 as Area_SqMi
+, SurveyUnitSet
+, Feature.STAsBinary() AS Geog 
+FROM Dataset_GSPE 
+WHERE 
+SurveyName = '",SurveyName,"'",sep='')
+
+# Build a database connection
+Connection = dbConnect(odbc(),Driver = "Sql Server",Server = "inpyugamsvm01\\nuna", Database = "Moose")
+
+# Get the data using the odbc method
+Units = dbGetQuery(Connection,Sql)
+
+# Now get the units having data (Moose > 0)
+Sql = paste("SELECT ID,Counted,Moose
+,Feature.EnvelopeCenter().Lat As Lat
+, Feature.EnvelopeCenter().Long as Lon
+, Feature.STArea() / 1000000 as Area_SqKm
+, Feature.STArea() / 2589988.110336 as Area_SqMi
+, SurveyUnitSet
+, Feature.STAsBinary() AS Geog 
+FROM Dataset_GSPE 
+WHERE SurveyName = '",SurveyName,"' And Moose > 0",sep='')
+UnitsWithMooseDF = dbGetQuery(Connection,Sql)
+
+# If there are survey units associated with the study, then show them
+if (nrow(Units) == 0){
+  print("There are no survey units associated with this survey")
+} else {
+  bboxdf = sqldf("SELECT Min(Lat) as MinLat,Max(Lat) as MaxLat,Min(Lon) as MinLon,Max(Lon) as MaxLon FROM Units")
+  
+  # Convert the data frame into a spatial data frame using sf package
+  UnitsSpatialDF <- sf::st_as_sf(subset(Units,!is.na(Units[,'Geog'])))
+  UnitsWithMooseSpatialDF  <- sf::st_as_sf(subset(UnitsWithMooseDF,!is.na(UnitsWithMooseDF[,'Geog'])))
+  
+  # Set the coordinate system to GCS Lat\Lon WGS1984
+  st_crs(UnitsSpatialDF) <- st_crs(4326)
+  st_crs(UnitsWithMooseSpatialDF) <- st_crs(4326)
+  
+  # Load in the park boundaries geojson file from Data Store
+  # Reference URL: https://irma.nps.gov/DataStore/Reference/Profile/2303652
+  AK_ParksGeoJSON = "https://irma.nps.gov/DataStore/DownloadFile/704836"
+  AK_Parks <- read_sf(AK_ParksGeoJSON,crs=4326)
+  
+  # Expansion factor to add to bounding box values so there is a little space between the units and the polygons
+  expansionFactor = 1.002
+  
+  # Make a title for the map 
+  PlotTitle = paste("Total moose observed by unit, ",SurveyName,sep="")
+  
+  # Plot the GSPE data
+  ggplot() +
+    # Park boundary
+    geom_sf(data=AK_Parks,fill='gray90',color="black",alpha=1) + # Park boundaries
+    
+    # Units
+    geom_sf(data = UnitsSpatialDF,aes(fill=SubArea),alpha=0.3,color='gray70') + #
+    #scale_fill_viridis_d(name = "Sub-area") +
+    scale_fill_brewer(palette = "RdBu",name="Sub-area") +
+    
+    # Moose
+    new_scale_fill() + ## geoms added after this will use a new scale definition
+    geom_sf(data = UnitsWithMooseSpatialDF,aes(fill=Moose)) +
+    scale_fill_gradient(low = "gray", high = "black") + 
+    # Label the units with the number of moose observed
+    geom_text(data = UnitsWithMooseSpatialDF, mapping = aes(x = Lon, y = Lat, label = Moose), size = 3, color = "black") + 
+    
+    # Limit the map to the area around the survey units
+    coord_sf(xlim = c(bboxdf$MinLon, bboxdf$MaxLon),ylim = c(bboxdf$MinLat,bboxdf$MaxLat),expand=TRUE) + # Limit to bounding box of surveyed
+    
+    ggtitle(PlotTitle) +
+    
+    theme_minimal() + # Minimal theme
+    theme(
+      panel.background = element_rect(fill = "white", color = NA),  # Background color of the panel
+      plot.background = element_rect(fill = "white", color = NA),       # Background color of the plot
+      panel.grid.major = element_line(color = "black"),                # Major grid lines
+      panel.grid.minor = element_line(color = "black")                 # Minor grid lines
+    )  
+
+}
+```
 
 # Quality Control Test Results
 
@@ -120,9 +240,6 @@ Quality control is an important part of the long-term moose monitoring program i
 
 ```
 
-
-
-
 ## QC Test: QC_UncertifiedSurveys
 
 ```{r echo=FALSE, label = "Quality control query test results: QC_UncertifiedSurveys",results='asis'}
@@ -132,7 +249,7 @@ Sql = paste("SELECT * FROM [QC_UncertifiedSurveys] WHERE SurveyName='",SurveyNam
 DF = dbGetQuery(Connection,Sql)
 
 # Print a Pass/Fail message with failing records summary
-if(DF$RecordCount > 0){
+if(nrow(DF) > 0){
   cat("\n**FAILED**\n\n")
   # Output the results
   Caption = paste("Table ",TableCounter,". Quality control query test results: QC_UncertifiedSurveys",sep="")
@@ -147,9 +264,7 @@ if(nrow(DF) > 0){ TableCounter = TableCounter + 1 }
 
 SQL: `r Sql`
 
-
-
-## Missing records (Empty survey)
+## QC Test: Missing records (Empty survey)
 
 Some moose surveys are known from the literature, but the data have been lost. Table `r TableCounter` lists such surveys.
 
@@ -195,7 +310,7 @@ if(nrow(DF) > 0){ TableCounter = TableCounter + 1 }
 
 ```
 
-## Missing units
+## QC Test: Missing units
 
 Ideally the survey unit boundaries should be known for each moose unit surveyed. Occasionally, these units have been lost entirely, or certain individual units are missing for other reasons (a unit may have been added spontaneously, or a unit may have been subdivided without documentation). Table `r TableCounter` lists surveys with missing units.
 
@@ -224,7 +339,7 @@ if(nrow(DF) > 0){ TableCounter = TableCounter + 1 }
 
 SQL: `r Sql`
 
-## Surveys with records and units but not yet certified
+## QC Test: Surveys with records and units but not yet certified
 
 As moose survey data is pulled into the moose monitoring database they are presumed to be raw data unsuitable for analysis. If supporting reports, summaries, or other validating documentation is available and the results match the imported data, then the data for the survey can be certified. Table `r TableCounter` lists surveys that have not yet been certified.
 
@@ -281,14 +396,22 @@ if(nrow(DF) > 0){ TableCounter = TableCounter + 1 }
 # Run the quality control query
 Sql = paste("SELECT * FROM [QC_GSPE_RecordCountsByCertificationLevel] WHERE SurveyName='",SurveyName,"'",sep="")
 DF = dbGetQuery(Connection,Sql)
-print(knitr::kable(DF, caption = Caption))
-TableCounter = TableCounter + 1 
+
+# Print a Pass/Fail message with failing records summary
+if(nrow(DF) > 0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_GSPE_RecordCountsByCertificationLevel",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
 
 ```
 
 SQL: `r Sql`
-
-
 
 SQL: `r Sql`
 
@@ -340,12 +463,7 @@ if(nrow(DF) > 0){ TableCounter = TableCounter + 1 }
 
 SQL: `r Sql`
 
-
-
-
-
 SQL: `r Sql`
-
 
 ## QC Test: QC_PossibleAdultCountErrors_Records
 
@@ -611,11 +729,6 @@ if(nrow(DF) > 0){ TableCounter = TableCounter + 1 }
 
 SQL: `r Sql`
 
-
-
-
-SQL: `r Sql`
-
 ## QC Test: QC_SurveysMissingUnits
 
 ```{r echo=FALSE, label = "Quality control query test results: QC_SurveysMissingUnits",results='asis'}
@@ -649,7 +762,7 @@ Sql = paste("SELECT * FROM [QC_SurveysWithNoDates] WHERE SurveyName='",SurveyNam
 DF = dbGetQuery(Connection,Sql)
 
 # Print a Pass/Fail message with failing records summary
-if(DF$`GSPE records missing DateCounted`>0){
+if(nrow(DF)>0){
   cat("\n**FAILED**\n\n")
   # Output the results
   Caption = paste("Table ",TableCounter,". Quality control query test results: QC_SurveysWithNoDates",sep="")
@@ -662,8 +775,21 @@ if(nrow(DF) > 0){ TableCounter = TableCounter + 1 }
 
 ```
 
-SQL: `r Sql`
+## Dataset Processing Steps
 
+Below are notes recorded during the data management life cycle from field data -\> database ingestion, through quality control and assessment, and dataset certification.
+
+```{r echo=FALSE, label = "Dataset Processing Steps"}
+
+# Run the quality control query
+Sql = paste("SELECT DatasetProcessingSteps FROM GSPE_Surveys WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+knitr::kable(DF)
+TableCounter = TableCounter + 1 
+
+```
+
+SQL: `r Sql`
 
 ```{r,label="Write the report to the survey directory", echo=FALSE}
 
@@ -697,6 +823,3 @@ tryCatch({
 
 
 ```
-
-
-

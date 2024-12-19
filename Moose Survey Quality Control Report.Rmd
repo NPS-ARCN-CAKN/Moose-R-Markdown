@@ -1,0 +1,702 @@
+---
+title: ""
+author: ""
+date: ""
+output:
+  html_document:
+    number_sections: no
+    toc: no
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+
+# START HERE: Enter a valid SurveyName below
+SurveyName = '2024 DENA Moose Survey'
+
+# You can get a list of SurveyNames by uncommenting the three lines below:
+#SurveyNamesQuery = "SELECT DISTINCT SurveyName FROM GSPE_Surveys ORDER BY SurveyName" # Query to get a list of survey names
+# SurveyNamesDataFrame = dbGetQuery(Connection,"SELECT DISTINCT SurveyName FROM GSPE_Surveys ORDER BY SurveyName") # Builds a data frame from the query above
+
+# DOCUMENTATION
+# This R Markdown file generates a skeleton summary report for an NPS Alaska Region Moose Survey. 
+# The user can flesh out the report as needed.
+# Author: NPS\SDMiller 
+# Date: 2024-12-11
+# Ensure your moose survey data is in the regional Moose SQL Server database and you
+# have at minimum datareader permissions on the database.
+ 
+# Load libraries
+library(knitr)
+library(ggplot2)
+library(sp)
+library(sf)
+library(odbc)
+library(leaflet)
+library(sqldf)
+library(ggnewscale)
+
+# Build a database connection
+Connection = dbConnect(odbc(),Driver = "Sql Server",Server = "inpyugamsvm01\\nuna", Database = "Moose")
+
+# Make kable show blanks for NAs
+options(knitr.kable.NA = '')
+
+# Current date
+CurrentDate = Sys.Date() # Get the current date
+
+# Function to convert a date string to a long date
+GetLongDate <- function(Date) {
+  return(format(as.Date(Date), format="%B %d, %Y "))
+}
+
+# These counters are used to number the tables and figures. Each gets incremented after use.
+TableCounter = 1
+FigureCounter = 1
+
+```
+
+```{r,label="Get Dashboard data",echo=FALSE}
+Sql = paste("SELECT 
+-- Year, Park, Network, SurveyName
+SurveyUnitSet
+, Methodology
+, RecordCount
+, UnitsInSurveyUnitSet
+, PolygonsCount
+, PercentCertified
+, ReportReferenceCode
+, DeliverablesDatasetReferenceCode
+, Season
+, ProtocolVersion
+, PopulationEstimateRecords
+, DensityEstimateRecords
+, DataSource
+, DataResourcesDirectory
+, ReportLink
+ --, Comments
+FROM Dashboard WHERE SurveyName = '",SurveyName,"'",sep='')
+
+DashboardDF = dbGetQuery(Connection,Sql) 
+DashboardDF_t = t(DashboardDF)
+
+
+```
+
+# Quality Control Report: `r SurveyName`
+
+## Summary
+
+```{r,echo=FALSE, tab.cap=paste("Table ",TableCounter,". Survey summary.",sep=""), label="Summary table"}
+#colnames(DashboardDF_t) = ""
+kable(DashboardDF_t, escape = TRUE)
+```
+
+
+# Quality Control Test Results
+
+Quality control is an important part of the long-term moose monitoring program in the National Parks of Alaska. The moose monitoring database has numerous automated quality control queries that can elucidate problem areas for correction. Some data defects cannot be rectified, and in such cases these defects have been documented. This section reports the results of quality control checks.
+
+```{r,echo=FALSE, label="SQL query to generate the QC sections below"}
+# The query to automatically generate the QC test code sections below:
+# select '## QC Test: ' + [Table] + '
+# 
+# ```{r echo=FALSE, label = "Quality control query test results: '+[Table]+'",results=''asis''}
+# 
+# # Run the quality control query
+# Sql = paste("' + SelectQuery + ' WHERE SurveyName=''",SurveyName,"''",sep="")
+# DF = dbGetQuery(Connection,Sql)
+# 
+# # Print a Pass/Fail message with failing records summary
+# if(nrow(DF) > 0){
+#   cat("\n**FAILED**\n\n")
+#   # Output the results
+#   Caption = paste("Table ",TableCounter,". Quality control query test results: '+[Table]+'",sep="")
+#   print(knitr::kable(DF, caption = Caption))
+# } else {
+#   cat("\nPASSED\n")
+# }
+# # I don''t know why this bombs the if block above, but I had to put it here
+# if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+
+
+
+## QC Test: QC_UncertifiedSurveys
+
+```{r echo=FALSE, label = "Quality control query test results: QC_UncertifiedSurveys",results='asis'}
+
+# Run the quality control query
+Sql = paste("SELECT * FROM [QC_UncertifiedSurveys] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(DF$RecordCount > 0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_UncertifiedSurveys",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+SQL: `r Sql`
+
+
+
+## Missing records (Empty survey)
+
+Some moose surveys are known from the literature, but the data have been lost. Table `r TableCounter` lists such surveys.
+
+```{r echo=FALSE, label = "Surveys missing records (Empty surveys) - Count.",results='asis'}
+# Run the quality control query
+Sql = paste("SELECT count(*) as [Surveys missing records] FROM Dashboard where RecordCount = 0 And  SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(DF$`Surveys missing records` != 0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_CertificationStatus",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+
+```
+
+## QC Test: QC_SurveysMissingGSPEData
+
+```{r echo=FALSE, label = "Quality control query test results: QC_SurveysMissingGSPEData",results='asis'}
+
+# Run the quality control query
+Sql = paste("SELECT * FROM [QC_SurveysMissingGSPEData] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(nrow(DF) > 0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_SurveysMissingGSPEData",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+## Missing units
+
+Ideally the survey unit boundaries should be known for each moose unit surveyed. Occasionally, these units have been lost entirely, or certain individual units are missing for other reasons (a unit may have been added spontaneously, or a unit may have been subdivided without documentation). Table `r TableCounter` lists surveys with missing units.
+
+```{r echo=FALSE, label = "Surveys having missing survey unit polygons.",results='asis'}
+
+
+Sql = paste("SELECT Year, Park, SurveyName, RecordCount, PolygonsCount,RecordCount-PolygonsCount as NullFeature, PercentCertified, Methodology
+FROM     Dashboard 
+WHERE recordcount>0 and PolygonsCount<>recordcount And SurveyName='",SurveyName,"'
+ORDER BY SurveyName DESC",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(nrow(DF)>0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_CertificationStatus",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+SQL: `r Sql`
+
+## Surveys with records and units but not yet certified
+
+As moose survey data is pulled into the moose monitoring database they are presumed to be raw data unsuitable for analysis. If supporting reports, summaries, or other validating documentation is available and the results match the imported data, then the data for the survey can be certified. Table `r TableCounter` lists surveys that have not yet been certified.
+
+```{r echo=FALSE, label = "Surveys with records and units but not yet certified.",results='asis'}
+
+Sql = paste("SELECT TOP 100 percent [Year],Park,SurveyName,RecordCount,PolygonsCount,PercentCertified,Comments FROM Dashboard 
+WHERE (RecordCount > 0 and PolygonsCount > 0 And 
+PercentCertified < 1) And SurveyName='",SurveyName,"'
+ORDER BY Park,[Year],SurveyName",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(nrow(DF)>0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_CertificationStatus",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+SQL: `r Sql`
+
+## QC Test: QC_CertificationStatus
+
+```{r echo=FALSE, label = "Quality control query test results: QC_CertificationStatus",results='asis'}
+
+# Run the quality control query
+Sql = paste("SELECT * FROM [QC_CertificationStatus] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(nrow(DF) > 0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_CertificationStatus",sep="")
+  print(knitr::kable(t(DF), caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+## QC Test: QC_GSPE_RecordCountsByCertificationLevel
+
+```{r echo=FALSE, label = "Quality control query test results: QC_GSPE_RecordCountsByCertificationLevel",results='asis'}
+
+# Run the quality control query
+Sql = paste("SELECT * FROM [QC_GSPE_RecordCountsByCertificationLevel] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+print(knitr::kable(DF, caption = Caption))
+TableCounter = TableCounter + 1 
+
+```
+
+SQL: `r Sql`
+
+
+
+SQL: `r Sql`
+
+## QC Test: QC_GSPE_DoubleSurveyedIDs
+
+```{r echo=FALSE, label = "Quality control query test results: QC_GSPE_DoubleSurveyedIDs",results='asis'}
+
+# Run the quality control query
+Sql = paste("SELECT * FROM [QC_GSPE_DoubleSurveyedIDs] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(nrow(DF) > 0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_GSPE_DoubleSurveyedIDs",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+SQL: `r Sql`
+
+## QC Test: QC_GSPE_MissingPolygons
+
+```{r echo=FALSE, label = "Quality control query test results: QC_GSPE_MissingPolygons",results='asis'}
+
+# Run the quality control query
+Sql = paste("SELECT * FROM [QC_GSPE_MissingPolygons] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(nrow(DF) > 0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_GSPE_MissingPolygons",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+SQL: `r Sql`
+
+
+
+
+
+SQL: `r Sql`
+
+
+## QC Test: QC_PossibleAdultCountErrors_Records
+
+```{r echo=FALSE, label = "Quality control query test results: QC_PossibleAdultCountErrors_Records",results='asis'}
+
+# Run the quality control query
+Sql = paste("SELECT * FROM [QC_PossibleAdultCountErrors_Records] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(nrow(DF) > 0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossibleAdultCountErrors_Records",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+SQL: `r Sql`
+
+## QC Test: QC_PossibleAdultCountErrors_Surveys
+
+```{r echo=FALSE, label = "Quality control query test results: QC_PossibleAdultCountErrors_Surveys",results='asis'}
+
+# Run the quality control query
+Sql = paste("SELECT * FROM [QC_PossibleAdultCountErrors_Surveys] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(nrow(DF) > 0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossibleAdultCountErrors_Surveys",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+SQL: `r Sql`
+
+## QC Test: QC_PossibleBullCountErrors_Records
+
+```{r echo=FALSE, label = "Quality control query test results: QC_PossibleBullCountErrors_Records",results='asis'}
+
+# Run the quality control query
+Sql = paste("SELECT * FROM [QC_PossibleBullCountErrors_Records] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(nrow(DF) > 0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossibleBullCountErrors_Records",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+SQL: `r Sql`
+
+## QC Test: QC_PossibleBullCountErrors_Surveys
+
+```{r echo=FALSE, label = "Quality control query test results: QC_PossibleBullCountErrors_Surveys",results='asis'}
+
+# Run the quality control query
+Sql = paste("SELECT * FROM [QC_PossibleBullCountErrors_Surveys] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(nrow(DF) > 0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossibleBullCountErrors_Surveys",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+SQL: `r Sql`
+
+## QC Test: QC_PossibleCalfCountErrors_Records
+
+```{r echo=FALSE, label = "Quality control query test results: QC_PossibleCalfCountErrors_Records",results='asis'}
+
+# Run the quality control query
+Sql = paste("SELECT * FROM [QC_PossibleCalfCountErrors_Records] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(nrow(DF) > 0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossibleCalfCountErrors_Records",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+SQL: `r Sql`
+
+## QC Test: QC_PossibleCalfCountErrors_Surveys
+
+```{r echo=FALSE, label = "Quality control query test results: QC_PossibleCalfCountErrors_Surveys",results='asis'}
+
+# Run the quality control query
+Sql = paste("SELECT * FROM [QC_PossibleCalfCountErrors_Surveys] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(nrow(DF) > 0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossibleCalfCountErrors_Surveys",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+SQL: `r Sql`
+
+## QC Test: QC_PossibleCowCountErrors_Records
+
+```{r echo=FALSE, label = "Quality control query test results: QC_PossibleCowCountErrors_Records",results='asis'}
+
+# Run the quality control query
+Sql = paste("SELECT * FROM [QC_PossibleCowCountErrors_Records] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(nrow(DF) > 0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossibleCowCountErrors_Records",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+SQL: `r Sql`
+
+## QC Test: QC_PossibleCowCountErrors_Surveys
+
+```{r echo=FALSE, label = "Quality control query test results: QC_PossibleCowCountErrors_Surveys",results='asis'}
+
+# Run the quality control query
+Sql = paste("SELECT * FROM [QC_PossibleCowCountErrors_Surveys] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(nrow(DF) > 0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossibleCowCountErrors_Surveys",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+SQL: `r Sql`
+
+## QC Test: QC_PossibleMooseCountErrors_Records
+
+```{r echo=FALSE, label = "Quality control query test results: QC_PossibleMooseCountErrors_Records",results='asis'}
+
+# Run the quality control query
+Sql = paste("SELECT * FROM [QC_PossibleMooseCountErrors_Records] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(nrow(DF) > 0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossibleMooseCountErrors_Records",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+SQL: `r Sql`
+
+## QC Test: QC_PossibleMooseCountErrors_Surveys
+
+```{r echo=FALSE, label = "Quality control query test results: QC_PossibleMooseCountErrors_Surveys",results='asis'}
+
+# Run the quality control query
+Sql = paste("SELECT * FROM [QC_PossibleMooseCountErrors_Surveys] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(nrow(DF) > 0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossibleMooseCountErrors_Surveys",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+SQL: `r Sql`
+
+## QC Test: QC_PossiblyBadXYCoordinates
+
+```{r echo=FALSE, label = "Quality control query test results: QC_PossiblyBadXYCoordinates",results='asis'}
+
+# Run the quality control query
+Sql = paste("SELECT * FROM [QC_PossiblyBadXYCoordinates] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(nrow(DF) > 0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossiblyBadXYCoordinates",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+SQL: `r Sql`
+
+
+
+
+SQL: `r Sql`
+
+## QC Test: QC_SurveysMissingUnits
+
+```{r echo=FALSE, label = "Quality control query test results: QC_SurveysMissingUnits",results='asis'}
+
+# Run the quality control query
+Sql = paste("SELECT * FROM [QC_SurveysMissingUnits] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(nrow(DF) > 0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_SurveysMissingUnits",sep="")
+  print(knitr::kable(DF, caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+SQL: `r Sql`
+
+## QC Test: QC_SurveysWithNoDates
+
+```{r echo=FALSE, label = "Quality control query test results: QC_SurveysWithNoDates",results='asis'}
+
+# Run the quality control query
+Sql = paste("SELECT * FROM [QC_SurveysWithNoDates] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+
+# Print a Pass/Fail message with failing records summary
+if(DF$`GSPE records missing DateCounted`>0){
+  cat("\n**FAILED**\n\n")
+  # Output the results
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_SurveysWithNoDates",sep="")
+  print(knitr::kable(t(DF), caption = Caption))
+} else {
+  cat("\nPASSED\n")
+}
+# I don't know why this bombs the if block above, but I had to put it here
+if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+
+```
+
+SQL: `r Sql`
+
+
+```{r,label="Write the report to the survey directory", echo=FALSE}
+
+# This template will output to an html file named MooseSurveyReport.htms
+# Rename it and copy it to the survey directory if it exists
+# Otherwise rename it in the current directory
+From = "Moose-Survey-Quality-Control-Report.html"
+
+# Set up the source file title
+ReportTitle = paste(SurveyName," Quality Control Report.html",sep="")
+
+
+# Check if the survey directory exists
+# Set up a destination file path for the file copy operation
+if (dir.exists(DashboardDF$DataResourcesDirectory)) {
+  To=paste(DashboardDF$DataResourcesDirectory,"/",ReportTitle,sep="")
+} else {
+  To=ReportTitle
+}
+
+# Try to copy the file to the destination
+tryCatch({
+  file.copy(From, To, overwrite = TRUE)
+  message(paste("Survey report ",From," generated and and copied to ",To,sep=""))
+}, error = function(e) {
+  
+  # An error happened
+  message("Error: ", e$message)
+  
+})
+
+
+```
+
+
+

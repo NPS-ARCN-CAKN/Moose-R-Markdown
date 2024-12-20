@@ -14,7 +14,7 @@ output:
 ```{r setup, include=FALSE, echo=FALSE}
 
 # START HERE: Enter a valid SurveyName below
-SurveyName = '2023 WRST Moose Survey'
+SurveyName = '2024 DENA Moose Survey'
 
 # You can get a list of SurveyNames by uncommenting the three lines below:
 #SurveyNamesQuery = "SELECT DISTINCT SurveyName FROM GSPE_Surveys ORDER BY SurveyName" # Query to get a list of survey names
@@ -217,8 +217,8 @@ if (nrow(Units) == 0){
 Quality control is an important part of the long-term moose monitoring program in the National Parks of Alaska. The moose monitoring database has numerous automated quality control queries that can elucidate problem areas for correction. Some data defects cannot be rectified, and in such cases these defects have been documented. This section reports the results of quality control checks.
 
 ```{r,echo=FALSE, label="SQL query to generate the QC sections below"}
-# The query to automatically generate the QC test code sections below:
-# select '## QC Test: ' + [Table] + '
+
+# select '## QC Test `r QCTestCounter`: ' + [Table] + '
 # 
 # ```{r echo=FALSE, label = "Quality control query test results: '+[Table]+'",results=''asis''}
 # 
@@ -237,36 +237,78 @@ Quality control is an important part of the long-term moose monitoring program i
 # }
 # # I don''t know why this bombs the if block above, but I had to put it here
 # if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+# if(nrow(DF) > 0){ QCTestCounter = QCTestCounter + 1 } 
+# ```
+# 
+# SQL: `r Sql`
+# 
+# '
+# from DatabaseTableDescriptions
+# where type='v' and [table] like 'QC%'
+
+# SQL: `r Sql`
+# 
+# '
+# from DatabaseTableDescriptions
+# where type='v' and [table] like 'QC%'
+# 
+# ```
 
 ```
 
-## QC Test: QC_UncertifiedSurveys
+## QC Test `r QCTestCounter`: QC_GSPE_RecordCountsByCertificationLevel
 
-```{r echo=FALSE, label = "Quality control query test results: QC_UncertifiedSurveys",results='asis'}
+This quality control test shows the progress toward dataset certification. Certifification levels in progression are as follows:
+
+| Certification level | Definition |
+|------------------|------------------------------------------------------|
+| Raw | Raw field data that have not undergone any quality control procedures. |
+| Provisional | Data that have been validated against field data collection forms or spreadsheet and that give no evidence of being invalid, but for which no secondary sources exist in order to validate the data (i.e. no report - just a file). |
+| Certified | Data that have been validated against source data collection files and/or forms and, additionally, secondary reports, summaries or verbal communications from project leaders confirming that the data are correct and true. |
+
+: Certification levels and descriptions.
+
+Raw data should never be used in analytical reports. Provisional data are permissible for internal analyses and summaries. Only certified data should be used for public facing reports.
+
+```{r echo=FALSE, label = "Quality control query test results: QC_GSPE_RecordCountsByCertificationLevel"}
 
 # Run the quality control query
-Sql = paste("SELECT * FROM [QC_UncertifiedSurveys] WHERE SurveyName='",SurveyName,"'",sep="")
+Sql = paste("SELECT CertificationLevel,[Record count] FROM [QC_GSPE_RecordCountsByCertificationLevel] WHERE SurveyName='",SurveyName,"'",sep="")
 DF = dbGetQuery(Connection,Sql)
+Caption = paste("Table ",TableCounter,". Number of records by certification level summary.",sep="")
+knitr::kable(DF, caption = Caption)
+TableCounter = TableCounter + 1  
+QCTestCounter = QCTestCounter + 1
+```
 
-# Print a Pass/Fail message with failing records summary
-if(nrow(DF) > 0){
-  cat("\n**FAILED**\n\n")
-  # Output the results
-  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_UncertifiedSurveys",sep="")
-  print(knitr::kable(DF, caption = Caption))
-} else {
-  cat("\nPASSED\n")
-}
-# I don't know why this bombs the if block above, but I had to put it here
-if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+SQL: `r Sql`
 
+## QC Test `r QCTestCounter`: Record Counts and Record Count
+
+This is an informational test showing the number of records in the dataset and percent of the records that are certified.
+
+```{r echo=FALSE, label = "Quality control query test results: QC_UncertifiedSurveys"}
+
+# Run the quality control query
+Sql = paste("SELECT [RecordCount]
+      ,[PercentCertified]
+      ,[ValidatedDate]
+      ,[ValidatedBy]
+      ,[ReportReferenceCode]
+  FROM [Moose].[dbo].[QC_UncertifiedSurveys] WHERE SurveyName='",SurveyName,"'",sep="")
+DF = dbGetQuery(Connection,Sql)
+# Output the results
+Caption = paste("Table ",TableCounter,". Quality control query test results: QC_UncertifiedSurveys",sep="")
+knitr::kable(t(DF), caption = Caption)
+TableCounter = TableCounter + 1
+## QC Test `r QCTestCounter`:
 ```
 
 SQL: `r Sql`
 
 ## QC Test: Missing records (Empty survey)
 
-Some moose surveys are known from the literature, but the data have been lost. Table `r TableCounter` lists such surveys.
+There are many historical moose surveys in the database for which no records have been recovered. This test will fail if there is a Survey record with no associated data.
 
 ```{r echo=FALSE, label = "Surveys missing records (Empty surveys) - Count.",results='asis'}
 # Run the quality control query
@@ -284,40 +326,18 @@ if(DF$`Surveys missing records` != 0){
 }
 # I don't know why this bombs the if block above, but I had to put it here
 if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
-
-
-```
-
-## QC Test: QC_SurveysMissingGSPEData
-
-```{r echo=FALSE, label = "Quality control query test results: QC_SurveysMissingGSPEData",results='asis'}
-
-# Run the quality control query
-Sql = paste("SELECT * FROM [QC_SurveysMissingGSPEData] WHERE SurveyName='",SurveyName,"'",sep="")
-DF = dbGetQuery(Connection,Sql)
-
-# Print a Pass/Fail message with failing records summary
-if(nrow(DF) > 0){
-  cat("\n**FAILED**\n\n")
-  # Output the results
-  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_SurveysMissingGSPEData",sep="")
-  print(knitr::kable(DF, caption = Caption))
-} else {
-  cat("\nPASSED\n")
-}
-# I don't know why this bombs the if block above, but I had to put it here
-if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+if(nrow(DF) > 0){ QCTestCounter = QCTestCounter + 1 } 
 
 ```
 
-## QC Test: Missing units
+## QC Test `r QCTestCounter`: Missing units
 
-Ideally the survey unit boundaries should be known for each moose unit surveyed. Occasionally, these units have been lost entirely, or certain individual units are missing for other reasons (a unit may have been added spontaneously, or a unit may have been subdivided without documentation). Table `r TableCounter` lists surveys with missing units.
+Ideally the survey unit boundaries should be known for each moose unit surveyed. Occasionally, these units have been lost entirely, or certain individual units are missing for other reasons (a unit may have been added spontaneously, or a unit may have been subdivided without documentation). Table `r TableCounter` lists surveys records for which there are no unit polygons.
 
 ```{r echo=FALSE, label = "Surveys having missing survey unit polygons.",results='asis'}
 
 
-Sql = paste("SELECT Year, Park, SurveyName, RecordCount, PolygonsCount,RecordCount-PolygonsCount as NullFeature, PercentCertified, Methodology
+Sql = paste("SELECT RecordCount, PolygonsCount,RecordCount-PolygonsCount as NullFeature, PercentCertified, Methodology
 FROM     Dashboard 
 WHERE recordcount>0 and PolygonsCount<>recordcount And SurveyName='",SurveyName,"'
 ORDER BY SurveyName DESC",sep="")
@@ -334,18 +354,18 @@ if(nrow(DF)>0){
 }
 # I don't know why this bombs the if block above, but I had to put it here
 if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
-
+if(nrow(DF) > 0){ QCTestCounter = QCTestCounter + 1 } 
 ```
 
 SQL: `r Sql`
 
-## QC Test: Surveys with records and units but not yet certified
+## QC Test `r QCTestCounter`: Surveys with records and units but not yet certified
 
 As moose survey data is pulled into the moose monitoring database they are presumed to be raw data unsuitable for analysis. If supporting reports, summaries, or other validating documentation is available and the results match the imported data, then the data for the survey can be certified. Table `r TableCounter` lists surveys that have not yet been certified.
 
 ```{r echo=FALSE, label = "Surveys with records and units but not yet certified.",results='asis'}
 
-Sql = paste("SELECT TOP 100 percent [Year],Park,SurveyName,RecordCount,PolygonsCount,PercentCertified,Comments FROM Dashboard 
+Sql = paste("SELECT RecordCount,PolygonsCount,PercentCertified,Comments FROM Dashboard 
 WHERE (RecordCount > 0 and PolygonsCount > 0 And 
 PercentCertified < 1) And SurveyName='",SurveyName,"'
 ORDER BY Park,[Year],SurveyName",sep="")
@@ -362,12 +382,14 @@ if(nrow(DF)>0){
 }
 # I don't know why this bombs the if block above, but I had to put it here
 if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
-
+if(nrow(DF) > 0){ QCTestCounter = QCTestCounter + 1 } 
 ```
 
 SQL: `r Sql`
 
-## QC Test: QC_CertificationStatus
+## QC Test `r QCTestCounter`: QC_CertificationStatus
+
+Summary of certification status for the `r SurveyName`.
 
 ```{r echo=FALSE, label = "Quality control query test results: QC_CertificationStatus",results='asis'}
 
@@ -386,36 +408,12 @@ if(nrow(DF) > 0){
 }
 # I don't know why this bombs the if block above, but I had to put it here
 if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
-
+if(nrow(DF) > 0){ QCTestCounter = QCTestCounter + 1 } 
 ```
 
-## QC Test: QC_GSPE_RecordCountsByCertificationLevel
+## QC Test `r QCTestCounter`: QC_GSPE_DoubleSurveyedIDs
 
-```{r echo=FALSE, label = "Quality control query test results: QC_GSPE_RecordCountsByCertificationLevel",results='asis'}
-
-# Run the quality control query
-Sql = paste("SELECT * FROM [QC_GSPE_RecordCountsByCertificationLevel] WHERE SurveyName='",SurveyName,"'",sep="")
-DF = dbGetQuery(Connection,Sql)
-
-# Print a Pass/Fail message with failing records summary
-if(nrow(DF) > 0){
-  cat("\n**FAILED**\n\n")
-  # Output the results
-  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_GSPE_RecordCountsByCertificationLevel",sep="")
-  print(knitr::kable(DF, caption = Caption))
-} else {
-  cat("\nPASSED\n")
-}
-# I don't know why this bombs the if block above, but I had to put it here
-if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
-
-```
-
-SQL: `r Sql`
-
-SQL: `r Sql`
-
-## QC Test: QC_GSPE_DoubleSurveyedIDs
+This quality control test reveals any units that were surveyed twice. This may arise if data were twice ingested into the database, or some other error occurred where a unit got surveyed twice.
 
 ```{r echo=FALSE, label = "Quality control query test results: QC_GSPE_DoubleSurveyedIDs",results='asis'}
 
@@ -434,12 +432,14 @@ if(nrow(DF) > 0){
 }
 # I don't know why this bombs the if block above, but I had to put it here
 if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
-
+if(nrow(DF) > 0){ QCTestCounter = QCTestCounter + 1 } 
 ```
 
 SQL: `r Sql`
 
-## QC Test: QC_GSPE_MissingPolygons
+## QC Test `r QCTestCounter`: QC_GSPE_MissingPolygons
+
+Records missing unit polygons.
 
 ```{r echo=FALSE, label = "Quality control query test results: QC_GSPE_MissingPolygons",results='asis'}
 
@@ -458,110 +458,40 @@ if(nrow(DF) > 0){
 }
 # I don't know why this bombs the if block above, but I had to put it here
 if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
-
+if(nrow(DF) > 0){ QCTestCounter = QCTestCounter + 1 } 
 ```
 
 SQL: `r Sql`
 
-SQL: `r Sql`
+## QC Test `r QCTestCounter`: QC_PossibleCalfCountErrors_Records
 
-## QC Test: QC_PossibleAdultCountErrors_Records
+The CALF column should, ideally, be a summation of the number of calves in the COW_W_* columns. The test below shows records where the database calculates a CALF count that differs from the field data.
 
-```{r echo=FALSE, label = "Quality control query test results: QC_PossibleAdultCountErrors_Records",results='asis'}
+If the entire CALF column is NULL for the survey (it just hasn't been calculated yet) you may execute the following stored procedure:
 
-# Run the quality control query
-Sql = paste("SELECT * FROM [QC_PossibleAdultCountErrors_Records] WHERE SurveyName='",SurveyName,"'",sep="")
-DF = dbGetQuery(Connection,Sql)
+`EXEC dbo.UpdateCALF_SAFE '`r SurveyName`'`
 
-# Print a Pass/Fail message with failing records summary
-if(nrow(DF) > 0){
-  cat("\n**FAILED**\n\n")
-  # Output the results
-  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossibleAdultCountErrors_Records",sep="")
-  print(knitr::kable(DF, caption = Caption))
-} else {
-  cat("\nPASSED\n")
-}
-# I don't know why this bombs the if block above, but I had to put it here
-if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
+This stored procedure will not overwrite any data - it will fail without changing anything if any CALF record for the survey is not NULL. In this case you must find and update the problematic records manually. Here is a query to help isolate problematic records:
 
-```
+`-- Select problem CALF summation records
+SELECT SurveyName, ID,COW_W_1,COW_W_2,COW_W_3
+,ISNULL(CALF_LONE,0) + ISNULL(COW_W_1,0) + ISNULL(COW_W_2,0) * 2 + ISNULL(COW_W_3,0) * 3 as [CALF (calculated)]
+, CALF
+,Comments
+,Convert(varchar(30),getdate()) + ' ' + SUSER_NAME() + ': CALF was corrected from ' + convert(varchar(4),ISNULL(CALF,0)) + ' to ' + convert(varchar(20),ISNULL(COW_W_1,0) + (ISNULL(COW_W_2,0) * 2) + (ISNULL(COW_W_3,0) * 3)) as UpdateComment
+FROM GSPE 
+WHERE (SurveyName = '2024 DENA Moose Survey') 
+AND ISNULL(CALF,0) <> (ISNULL(CALF_LONE,0) + ISNULL(COW_W_1,0) + (ISNULL(COW_W_2,0) * 2) + (ISNULL(COW_W_3,0) * 3))
+ORDER BY ID`
 
-SQL: `r Sql`
+and, if you are confident in your database skills, an INSERT query to help in fixing them:
 
-## QC Test: QC_PossibleAdultCountErrors_Surveys
-
-```{r echo=FALSE, label = "Quality control query test results: QC_PossibleAdultCountErrors_Surveys",results='asis'}
-
-# Run the quality control query
-Sql = paste("SELECT * FROM [QC_PossibleAdultCountErrors_Surveys] WHERE SurveyName='",SurveyName,"'",sep="")
-DF = dbGetQuery(Connection,Sql)
-
-# Print a Pass/Fail message with failing records summary
-if(nrow(DF) > 0){
-  cat("\n**FAILED**\n\n")
-  # Output the results
-  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossibleAdultCountErrors_Surveys",sep="")
-  print(knitr::kable(DF, caption = Caption))
-} else {
-  cat("\nPASSED\n")
-}
-# I don't know why this bombs the if block above, but I had to put it here
-if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
-
-```
-
-SQL: `r Sql`
-
-## QC Test: QC_PossibleBullCountErrors_Records
-
-```{r echo=FALSE, label = "Quality control query test results: QC_PossibleBullCountErrors_Records",results='asis'}
-
-# Run the quality control query
-Sql = paste("SELECT * FROM [QC_PossibleBullCountErrors_Records] WHERE SurveyName='",SurveyName,"'",sep="")
-DF = dbGetQuery(Connection,Sql)
-
-# Print a Pass/Fail message with failing records summary
-if(nrow(DF) > 0){
-  cat("\n**FAILED**\n\n")
-  # Output the results
-  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossibleBullCountErrors_Records",sep="")
-  print(knitr::kable(DF, caption = Caption))
-} else {
-  cat("\nPASSED\n")
-}
-# I don't know why this bombs the if block above, but I had to put it here
-if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
-
-```
-
-SQL: `r Sql`
-
-## QC Test: QC_PossibleBullCountErrors_Surveys
-
-```{r echo=FALSE, label = "Quality control query test results: QC_PossibleBullCountErrors_Surveys",results='asis'}
-
-# Run the quality control query
-Sql = paste("SELECT * FROM [QC_PossibleBullCountErrors_Surveys] WHERE SurveyName='",SurveyName,"'",sep="")
-DF = dbGetQuery(Connection,Sql)
-
-# Print a Pass/Fail message with failing records summary
-if(nrow(DF) > 0){
-  cat("\n**FAILED**\n\n")
-  # Output the results
-  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossibleBullCountErrors_Surveys",sep="")
-  print(knitr::kable(DF, caption = Caption))
-} else {
-  cat("\nPASSED\n")
-}
-# I don't know why this bombs the if block above, but I had to put it here
-if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
-
-```
-
-SQL: `r Sql`
-
-## QC Test: QC_PossibleCalfCountErrors_Records
+`-- DO NOT FORGET TO COMMIT OR ROLLBACK THESE INSERT QUERIES or the database will be left stateless!
+BEGIN TRANSACTION -- COMMIT ROLLBACK
+UPDATE GSPE SET CALF = ISNULL(CALF_LONE,0) + ISNULL(COW_W_1,0) + ISNULL(COW_W_2,0) * 2 + ISNULL(COW_W_3,0) * 3
+,Comments =  Convert(varchar(30),getdate()) + ' ' + SUSER_NAME() + ': CALF was corrected from ' + convert(varchar(4),ISNULL(CALF,0)) + ' to ' + convert(varchar(20),ISNULL(COW_W_1,0) + (ISNULL(COW_W_2,0) * 2) + (ISNULL(COW_W_3,0) * 3))
+WHERE (SurveyName = '2024 DENA Moose Survey') 
+AND ISNULL(CALF,0) <> (ISNULL(CALF_LONE,0) + ISNULL(COW_W_1,0) + (ISNULL(COW_W_2,0) * 2) + (ISNULL(COW_W_3,0) * 3))`
 
 ```{r echo=FALSE, label = "Quality control query test results: QC_PossibleCalfCountErrors_Records",results='asis'}
 
@@ -580,36 +510,66 @@ if(nrow(DF) > 0){
 }
 # I don't know why this bombs the if block above, but I had to put it here
 if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
-
+if(nrow(DF) > 0){ QCTestCounter = QCTestCounter + 1 } 
 ```
 
 SQL: `r Sql`
 
-## QC Test: QC_PossibleCalfCountErrors_Surveys
+## QC Test `r QCTestCounter`: QC_PossibleBullCountErrors_Records
 
-```{r echo=FALSE, label = "Quality control query test results: QC_PossibleCalfCountErrors_Surveys",results='asis'}
+The BULL_ALL column should, ideally, be a summation of the number of bulls in the BULL_* columns. The test below shows records where the database calculates a BULL_ALL count that differs from the field data.
+
+If the entire BULL_ALL column is NULL for the survey (it just hasn't been calculated yet) you may execute the following stored procedure:
+
+`EXEC dbo.UpdateBULL_ALL_SAFE '`r SurveyName`'`
+
+This stored procedure will not overwrite any data - it will fail without changing anything if any BULL_ALL record for the survey is not NULL. In this case you must find and update the problematic records manually. 
+
+```{r echo=FALSE, label = "Quality control query test results: QC_PossibleBullCountErrors_Records",results='asis'}
 
 # Run the quality control query
-Sql = paste("SELECT * FROM [QC_PossibleCalfCountErrors_Surveys] WHERE SurveyName='",SurveyName,"'",sep="")
+Sql = paste("SELECT * FROM [QC_PossibleBullCountErrors_Records] WHERE SurveyName='",SurveyName,"'",sep="")
 DF = dbGetQuery(Connection,Sql)
 
 # Print a Pass/Fail message with failing records summary
 if(nrow(DF) > 0){
   cat("\n**FAILED**\n\n")
   # Output the results
-  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossibleCalfCountErrors_Surveys",sep="")
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossibleBullCountErrors_Records",sep="")
   print(knitr::kable(DF, caption = Caption))
 } else {
   cat("\nPASSED\n")
 }
 # I don't know why this bombs the if block above, but I had to put it here
 if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
-
+if(nrow(DF) > 0){ QCTestCounter = QCTestCounter + 1 } 
 ```
 
 SQL: `r Sql`
 
-## QC Test: QC_PossibleCowCountErrors_Records
+## QC Test `r QCTestCounter`: QC_PossibleCowCountErrors_Records
+
+
+The COW column should, ideally, be a summation of the number of cows in the COW_W_* columns. The test below shows records where the database calculates a COW count that differs from the field data.
+
+NOTE: This test will return false positives if the survey did not intend to fill the COW_W_* columns, but rather counted cows in aggregate, regardless of calf status (i.e. the COW_W_* columns should be NULL)
+
+If the entire COW column is NULL for the survey (it just hasn't been calculated yet) you may execute the following stored procedure:
+
+`EXEC dbo.UpdateCOW_SAFE '`r SurveyName`'`
+
+This stored procedure will not overwrite any data - it will fail without changing anything if any COW record for the survey is not NULL. In this case you must find and update the problematic records manually. A starting query:
+
+`-- Select problem COW summation records
+SELECT SurveyName, ID,COW_W_1,COW_W_2,COW_W_3,COW
+,ISNULL(COW_W_0,0),ISNULL(COW_W_1,0) + ISNULL(COW_W_2,0) + ISNULL(COW_W_3,0) As [COW (calculated)]
+, COW
+,Comments
+,Convert(varchar(30),getdate()) + ' ' + SUSER_NAME() + ': COW was corrected from ' + convert(varchar(4),ISNULL(COW,0)) + ' to ' + convert(varchar(20),ISNULL(COW_W_1,0) + (ISNULL(COW_W_2,0) * 2) + (ISNULL(COW_W_3,0) * 3)) as UpdateComment
+FROM GSPE 
+WHERE (SurveyName = '`r SurveyName`') 
+AND ISNULL(COW,0) <>  (ISNULL(COW_W_0,0) + ISNULL(COW_W_1,0) + ISNULL(COW_W_2,0) + ISNULL(COW_W_3,0))
+ORDER BY COW_W_0,COW_W_1,COW_W_2,COW_W_3`
 
 ```{r echo=FALSE, label = "Quality control query test results: QC_PossibleCowCountErrors_Records",results='asis'}
 
@@ -628,36 +588,49 @@ if(nrow(DF) > 0){
 }
 # I don't know why this bombs the if block above, but I had to put it here
 if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
-
+if(nrow(DF) > 0){ QCTestCounter = QCTestCounter + 1 } 
 ```
 
 SQL: `r Sql`
 
-## QC Test: QC_PossibleCowCountErrors_Surveys
+## QC Test `r QCTestCounter`: QC_PossibleAdultCountErrors_Records
 
-```{r echo=FALSE, label = "Quality control query test results: QC_PossibleCowCountErrors_Surveys",results='asis'}
+The ADULT column should, ideally, be a summation of COW and BULL. The test below shows records where the database calculates an ADULT count that differs from the field data.
+
+Records shown below may not be an error if only sub-adults were surveyed. The Adult (calculated) column shows the presumed correct ADULT count and should match the count in ADULT. If the entire ADULT column is NULL for the survey (it just hasn't been calculated yet) you may execute the following stored procedure:
+
+`EXEC dbo.UpdateADULT_SAFE '`r SurveyName`'`
+
+This stored procedure will not overwrite any data; it will fail without changing anything if any ADULT record for the survey is not NULL. In this case you must find and update the problematic records manually. Here is a query to help isolate problematic records:
+
+`SELECT SurveyName, ID,COW + BULL_ALL as [ADULT (calculated)], ADULT, BULL_ALL, COW FROM GSPE WHERE (SurveyName = '`r SurveyName`') AND (ADULT <> (COW + BULL_ALL)) ORDER BY ID`
+
+```{r echo=FALSE, label = "Quality control query test results: QC_PossibleAdultCountErrors_Records",results='asis'}
 
 # Run the quality control query
-Sql = paste("SELECT * FROM [QC_PossibleCowCountErrors_Surveys] WHERE SurveyName='",SurveyName,"'",sep="")
+Sql = paste("SELECT * FROM [QC_PossibleAdultCountErrors_Records] WHERE SurveyName='",SurveyName,"'",sep="")
 DF = dbGetQuery(Connection,Sql)
 
 # Print a Pass/Fail message with failing records summary
 if(nrow(DF) > 0){
   cat("\n**FAILED**\n\n")
   # Output the results
-  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossibleCowCountErrors_Surveys",sep="")
+  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossibleAdultCountErrors_Records",sep="")
   print(knitr::kable(DF, caption = Caption))
 } else {
   cat("\nPASSED\n")
 }
 # I don't know why this bombs the if block above, but I had to put it here
 if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
-
+if(nrow(DF) > 0){ QCTestCounter = QCTestCounter + 1 } 
 ```
 
 SQL: `r Sql`
 
-## QC Test: QC_PossibleMooseCountErrors_Records
+
+## QC Test `r QCTestCounter`: QC_PossibleMooseCountErrors_Records
+
+Moose should be a correct summation of total calves and adults.
 
 ```{r echo=FALSE, label = "Quality control query test results: QC_PossibleMooseCountErrors_Records",results='asis'}
 
@@ -676,36 +649,12 @@ if(nrow(DF) > 0){
 }
 # I don't know why this bombs the if block above, but I had to put it here
 if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
-
+if(nrow(DF) > 0){ QCTestCounter = QCTestCounter + 1 } 
 ```
 
 SQL: `r Sql`
 
-## QC Test: QC_PossibleMooseCountErrors_Surveys
-
-```{r echo=FALSE, label = "Quality control query test results: QC_PossibleMooseCountErrors_Surveys",results='asis'}
-
-# Run the quality control query
-Sql = paste("SELECT * FROM [QC_PossibleMooseCountErrors_Surveys] WHERE SurveyName='",SurveyName,"'",sep="")
-DF = dbGetQuery(Connection,Sql)
-
-# Print a Pass/Fail message with failing records summary
-if(nrow(DF) > 0){
-  cat("\n**FAILED**\n\n")
-  # Output the results
-  Caption = paste("Table ",TableCounter,". Quality control query test results: QC_PossibleMooseCountErrors_Surveys",sep="")
-  print(knitr::kable(DF, caption = Caption))
-} else {
-  cat("\nPASSED\n")
-}
-# I don't know why this bombs the if block above, but I had to put it here
-if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
-
-```
-
-SQL: `r Sql`
-
-## QC Test: QC_PossiblyBadXYCoordinates
+## QC Test `r QCTestCounter`: QC_PossiblyBadXYCoordinates
 
 ```{r echo=FALSE, label = "Quality control query test results: QC_PossiblyBadXYCoordinates",results='asis'}
 
@@ -724,12 +673,12 @@ if(nrow(DF) > 0){
 }
 # I don't know why this bombs the if block above, but I had to put it here
 if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
-
+if(nrow(DF) > 0){ QCTestCounter = QCTestCounter + 1 } 
 ```
 
 SQL: `r Sql`
 
-## QC Test: QC_SurveysMissingUnits
+## QC Test `r QCTestCounter`: QC_SurveysMissingUnits
 
 ```{r echo=FALSE, label = "Quality control query test results: QC_SurveysMissingUnits",results='asis'}
 
@@ -748,12 +697,14 @@ if(nrow(DF) > 0){
 }
 # I don't know why this bombs the if block above, but I had to put it here
 if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
-
+if(nrow(DF) > 0){ QCTestCounter = QCTestCounter + 1 } 
 ```
 
 SQL: `r Sql`
 
-## QC Test: QC_SurveysWithNoDates
+## QC Test `r QCTestCounter`: QC_SurveysWithNoDates
+
+This test shows records having no data collection date.
 
 ```{r echo=FALSE, label = "Quality control query test results: QC_SurveysWithNoDates",results='asis'}
 
@@ -772,7 +723,7 @@ if(nrow(DF)>0){
 }
 # I don't know why this bombs the if block above, but I had to put it here
 if(nrow(DF) > 0){ TableCounter = TableCounter + 1 } 
-
+if(nrow(DF) > 0){ QCTestCounter = QCTestCounter + 1 } 
 ```
 
 ## Dataset Processing Steps

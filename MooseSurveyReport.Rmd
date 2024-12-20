@@ -113,11 +113,13 @@ Sql = paste("SELECT
 , N
 , [Records missing polygons]
 , [Proportion of records certified]
-, [Area surveyed (sq. mi.)]
-, [Area surveyed (sq. km.)]
-, [Calves: 100 cows]
-, [Bulls: 100 cows]
-, [Calves: 100 adults]
+ ,[Area of survey (Km^2)]
+ ,[Area of surveyed units (Km^2)]
+ ,[Area of survey (Mi^2)]
+ ,[Area of surveyed units (Mi^2)]
+, [Calves: 100 cows] as [Calves:100 cows (unadjusted)]
+, [Bulls: 100 cows] as [Bulls:100 cows (unadjusted)]
+, [Calves: 100 adults] as [Calves:100 adults (unadjusted)]
 , [Minimum density (unadjusted moose/sq. mi.)]
 , [Area_SqMi, counted]
 , [N, counted]
@@ -167,16 +169,18 @@ Summary_GSPEDF =  dbGetQuery(Connection,Sql)
 StartDate = Summary_GSPEDF$StartDate
 StartDate = format(as.Date(Summary_GSPEDF$StartDate), "%B %d, %Y")
 EndDate = format(as.Date(Summary_GSPEDF$EndDate), "%B %d, %Y")
-Area_SqMi = Summary_GSPEDF$Area_SqMi
-Area_SqKm = Summary_GSPEDF$Area_SqKM
+Area_SqMi = Summary_GSPEDF$`Area of survey (Mi^2)`
+Area_SqKm = Summary_GSPEDF$`Area of survey (Km^2)`
+SurveyedUnitsArea_SqMi = Summary_GSPEDF$`Area of surveyed units (Mi^2)`
+SurveyedUnitsArea_SqKm = Summary_GSPEDF$`Area of surveyed units (Km^2)`
 ```
 
 # Survey Summary: `r SurveyName` (DRAFT)
 
-`r Investigator`   
-Wildlife Biologist, `r Park`
-National Park Service   
-[Address]
+<!-- `r Investigator`    -->
+<!-- Wildlife Biologist, `r Park` -->
+<!-- National Park Service    -->
+<!-- [Address] -->
 
 
 Scott D. Miller  
@@ -189,10 +193,6 @@ Anchorage, AK 99501
 
 
 `r format(Sys.Date(), "%B %d, %Y")`
-
-
-
-
 
 
 
@@ -245,8 +245,6 @@ DashboardDF_t = t(DashboardDF)
 kable(DashboardDF_t, escape = TRUE)
 
 ```
-
-
 
 # Survey Area
 
@@ -386,68 +384,8 @@ Survey results are presented in Table3, below. Please note these results are cal
 
 Table 3. Survey results.
 
-```{r,label="Get survey summary data", echo=FALSE}
-Sql = paste("SELECT Park
-, Year
---, StartDate
--- , EndDate
-, N
-, [Records missing polygons]
-, [Proportion of records certified]
-, [Area surveyed (sq. mi.)]
-, [Area surveyed (sq. km.)]
-, [Calves: 100 cows]
-, [Bulls: 100 cows]
-, [Calves: 100 adults]
-, [Minimum density (unadjusted moose/sq. mi.)]
-, [N, counted]
-, [N, not counted]
-, [N, Counted is NULL]
-, [Proportion of units counted]
-, CALF
-, [Total calves (Calculated)]
-, COW_W_0
-, COW_W_1
-, COW_W_2
-, COW_W_3
-, COW
---, [Total cows (Calculated)]
-, YBULL_SF
-, YBULL_GTSF
-, SM_BULL
-, MED_BULL
-, MED_L_BULL
-, LG_BULL
-, BULL_30_40
-, BULL_30_50
-, BULL_30_60
-, BULL_41_50
-, BULL_GT_50
-, BULL_GT_60
-, BULL_GTE_50
-, BULL_LT_30
-, BULL_LT_50
-, YBULL_ALL
-, BULL_ALL
---, [Total bulls (Calculated)]
-, UNKNOWN
-, ADULT
---, [Total adults (Calculated)]
-, MOOSE
---, [Total moose (Calculated)]
---, Personnel
---, Report
---, DeliverableDataset
---, Protocol
---, SurveyUnitSet 
-FROM Summary_GSPE
-WHERE SurveyName = '",SurveyName,"'",sep='')
-
-Summary_ResultsDF = dbGetQuery(Connection,Sql) 
-Summary_ResultsDF_t = t(Summary_ResultsDF)
-colnames(Summary_ResultsDF_t) = NULL
-kable(Summary_ResultsDF_t)
-
+```{r,label="Table of survey summary data", echo=FALSE}
+knitr::kable(t(Summary_GSPEDF))
 ```
 
 # Discussion
